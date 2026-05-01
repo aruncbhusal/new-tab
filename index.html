@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>New Tab</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="background" data-background aria-hidden="true"></div>
+    <div class="atmosphere" data-atmosphere aria-hidden="true"></div>
+    <div class="mist" aria-hidden="true"></div>
+
+    <form class="focus-timer" data-focus-timer data-timer-form aria-label="Focus timer">
+      <span class="focus-timer__label">Focus mode</span>
+      <div class="focus-timer__minutes" data-timer-minutes>
+        <button
+          class="focus-timer__stepper"
+          data-timer-decrease
+          type="button"
+          aria-label="Decrease timer by 5 minutes"
+        >
+          -
+        </button>
+        <input
+          class="focus-timer__input"
+          data-timer-input
+          type="number"
+          min="5"
+          max="180"
+          step="5"
+          value="25"
+          aria-label="Focus timer in minutes"
+        >
+        <span class="focus-timer__unit">mins</span>
+        <button
+          class="focus-timer__stepper"
+          data-timer-increase
+          type="button"
+          aria-label="Increase timer by 5 minutes"
+        >
+          +
+        </button>
+      </div>
+      <span class="focus-timer__display" data-timer-display>25:00</span>
+      <div class="focus-timer__actions">
+        <button class="focus-timer__button" data-timer-start type="submit" aria-label="Start timer">&#9654;</button>
+        <button class="focus-timer__button focus-timer__button--stop" data-timer-stop type="button" aria-label="Stop timer">&#9632;</button>
+      </div>
+    </form>
+
+    <nav class="pinned-sites" aria-label="Pinned sites">
+      <p class="eyebrow">Pinned</p>
+      <div class="pinned-sites__list" data-links></div>
+    </nav>
+
+    <main class="shell">
+      <section class="focus" aria-label="Dashboard">
+        <div class="clock-anchor">
+          <time class="clock" data-clock>00:00</time>
+          <p class="greeting" data-greeting>Good evening, friend.</p>
+        </div>
+      </section>
+    </main>
+
+    <figure class="quote" data-quote>
+      <blockquote class="quote__text" data-quote-text></blockquote>
+      <figcaption class="quote__author" data-quote-author></figcaption>
+    </figure>
+
+    <aside class="notes-panel" aria-label="Notes">
+      <label class="notes-panel__label" for="notes">Notes</label>
+      <textarea
+        class="notes"
+        id="notes"
+        data-notes
+        aria-label="Notes"
+        spellcheck="false"
+        placeholder="Leave yourself a quiet note."
+      ></textarea>
+    </aside>
+
+    <button
+      class="menu-toggle"
+      type="button"
+      data-menu-toggle
+      aria-expanded="false"
+      aria-controls="dashboard-menu"
+      aria-label="Open settings"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+    <aside class="menu" id="dashboard-menu" data-menu aria-hidden="true">
+      <form class="menu__section" data-name-form>
+        <label class="menu__label" for="nickname-input">Nickname</label>
+        <div class="menu__row">
+          <input
+            class="menu__input"
+            id="nickname-input"
+            data-nickname-input
+            type="text"
+            maxlength="24"
+            placeholder="How should this page greet you?"
+          >
+          <button class="menu__button" type="submit">Save</button>
+        </div>
+      </form>
+
+      <form class="menu__section" data-link-form>
+        <label class="menu__label" for="site-label">Add site</label>
+        <input
+          class="menu__input"
+          id="site-label"
+          data-link-label
+          type="text"
+          maxlength="24"
+          placeholder="Label"
+        >
+        <input
+          class="menu__input"
+          id="site-url"
+          data-link-url
+          type="text"
+          inputmode="url"
+          placeholder="example.com"
+        >
+        <div class="menu__stack">
+          <button class="menu__button menu__button--wide" type="submit">Pin site</button>
+          <p class="menu__status" data-link-status>Up to 8 pinned sites.</p>
+        </div>
+      </form>
+
+      <section class="menu__section">
+        <p class="menu__label">Manage pinned</p>
+        <div class="menu__list" data-link-manager></div>
+      </section>
+    </aside>
+
+    <script src="script.js"></script>
+  </body>
+</html>
