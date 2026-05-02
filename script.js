@@ -1,3 +1,15 @@
+/**
+ * script.js — Minimal New Tab page behaviour.
+ *
+ * Responsibilities:
+ *  - clock & greeting
+ *  - pinned sites and favicons
+ *  - notes persistence
+ *  - focus timer with expiry sound
+ *  - background image loading and caching
+ */
+const TICK_RATE = 1000;
+
 const quotes = [
     {
         text: 'I am rooted, but I flow.',
@@ -60,23 +72,12 @@ const greetingVariants = {
     ],
 };
 
-const defaultQuickLinks = [
-    { label: 'Gmail', href: 'https://mail.google.com' },
-    { label: 'Calendar', href: 'https://calendar.google.com' },
-    { label: 'Drive', href: 'https://drive.google.com' },
-    { label: 'GitHub', href: 'https://github.com' },
-    { label: 'Notion', href: 'https://www.notion.so' },
-    { label: 'YouTube', href: 'https://www.youtube.com' },
-    { label: 'Maps', href: 'https://maps.google.com' },
-];
-
+// Local fallback images used while a remote background is fetched.
 const fallbackImages = [
     'assets/fallback-1.svg',
     'assets/fallback-2.svg',
     'assets/fallback-3.svg',
     'assets/fallback-4.svg',
-    'assets/fallback-5.svg',
-    'assets/fallback-6.svg',
 ];
 
 const notesStorageKey = 'minimal-new-tab-notes';
@@ -87,132 +88,108 @@ const focusEndStorageKey = 'minimal-new-tab-focus-end';
 const backgroundCacheStorageKey = 'minimal-new-tab-background-cache';
 const backgroundCacheTtlMs = 8 * 60 * 60 * 1000;
 const maxPinnedSites = 8;
+const hour12StorageKey = 'minimal-new-tab-hour12';
+const $ = (q) => document.querySelector(q);
 
-const backgroundElement = document.querySelector('[data-background]');
-const atmosphereElement = document.querySelector('[data-atmosphere]');
-const clockElement = document.querySelector('[data-clock]');
-const greetingElement = document.querySelector('[data-greeting]');
-const quoteTextElement = document.querySelector('[data-quote-text]');
-const quoteAuthorElement = document.querySelector('[data-quote-author]');
-const notesElement = document.querySelector('[data-notes]');
-const linksElement = document.querySelector('[data-links]');
-const linkManagerElement = document.querySelector('[data-link-manager]');
-const linkStatusElement = document.querySelector('[data-link-status]');
-const nicknameInputElement = document.querySelector('[data-nickname-input]');
-const linkLabelElement = document.querySelector('[data-link-label]');
-const linkUrlElement = document.querySelector('[data-link-url]');
-const nameFormElement = document.querySelector('[data-name-form]');
-const linkFormElement = document.querySelector('[data-link-form]');
-const menuElement = document.querySelector('[data-menu]');
-const menuToggleElement = document.querySelector('[data-menu-toggle]');
-const focusTimerElement = document.querySelector('[data-focus-timer]');
-const timerFormElement = document.querySelector('[data-timer-form]');
-const timerInputElement = document.querySelector('[data-timer-input]');
-const timerDisplayElement = document.querySelector('[data-timer-display]');
-const timerStartButtonElement = document.querySelector('[data-timer-start]');
-const timerStopButtonElement = document.querySelector('[data-timer-stop]');
-const timerDecreaseButtonElement = document.querySelector(
-    '[data-timer-decrease]',
+// Lightweight wrapper for localStorage.
+// - Serialises values as JSON.
+// - Returns a sensible fallback on parse errors.
+// - Passing `null`/`undefined` removes the key.
+const store = {
+    get: (k, f = null) => {
+        try {
+            const v = localStorage.getItem(k);
+            return v === null ? f : JSON.parse(v);
+        } catch {
+            return f;
+        }
+    },
+    set: (k, v) => {
+        try {
+            v === null || v === undefined
+                ? localStorage.removeItem(k)
+                : localStorage.setItem(k, JSON.stringify(v));
+        } catch {}
+    },
+};
+
+const create = (tag, props = {}, ...children) => {
+    const el = document.createElement(tag);
+
+    Object.assign(el, props);
+
+    for (const child of children.flat()) {
+        if (child == null) continue;
+        el.append(child);
+    }
+
+    return el;
+};
+
+let use12Hour = Boolean(store.get(hour12StorageKey, false));
+
+const el = {
+    bg: $('[data-background]'),
+    clock: $('[data-clock]'),
+    greeting: $('[data-greeting]'),
+    quoteText: $('[data-quote-text]'),
+    quoteAuthor: $('[data-quote-author]'),
+    notes: $('[data-notes]'),
+    links: $('[data-links]'),
+    linkManager: $('[data-link-manager]'),
+    linkStatus: $('[data-link-status]'),
+    nicknameInput: $('[data-nickname-input]'),
+    linkLabel: $('[data-link-label]'),
+    linkUrl: $('[data-link-url]'),
+    nameForm: $('[data-name-form]'),
+    linkForm: $('[data-link-form]'),
+    menu: $('[data-menu]'),
+    menuToggle: $('[data-menu-toggle]'),
+    timer: $('[data-focus-timer]'),
+    timerInput: $('[data-timer-input]'),
+    timerDisplay: $('[data-timer-display]'),
+    timerStart: $('[data-timer-start]'),
+    timerStop: $('[data-timer-stop]'),
+    timerDec: $('[data-timer-decrease]'),
+    timerInc: $('[data-timer-increase]'),
+    notesPanel: $('[data-notes-panel]'),
+};
+const glassElements = [el.timer, el.notesPanel, el.menu, el.menuToggle].filter(
+    Boolean,
 );
-const timerIncreaseButtonElement = document.querySelector(
-    '[data-timer-increase]',
-);
-const glassElements = [
-    focusTimerElement,
-    notesElement.closest('.notes-panel'),
-    menuElement,
-    menuToggleElement,
-].filter(Boolean);
 
 const state = {
-    nickname: readStorage(nicknameStorageKey) || '',
+    nickname: store.get(nicknameStorageKey, ''),
     links: loadPinnedSites(),
-    greetingKey: '',
-    greetingText: '',
     timer: {
         intervalId: null,
         endTime: 0,
         minutes: loadFocusMinutes(),
-        audioContext: null,
     },
 };
 
 const prefersReducedMotion = window.matchMedia(
-    '(prefers-reduced-motion: reduce)'
+    '(prefers-reduced-motion: reduce)',
 ).matches;
 
 let cachedGreeting = { key: null, text: '' };
 
-function setState(updater) {
-    const prev = {
-        ...state,
-        timer: { ...(state.timer || {}) },
-    };
+// Global AudioContext used for expiry sounds.
+// Kept at module scope to avoid creating multiple contexts.
+let audioCtx = null;
 
-    const partial = typeof updater === 'function' ? updater(prev) : updater;
-    if (!partial || typeof partial !== 'object') return;
-
-    if (partial.timer && typeof partial.timer === 'object') {
-        Object.assign(state.timer, partial.timer);
-        delete partial.timer;
-    }
-
-    Object.assign(state, partial);
-
-    render();
-}
-
-function render() {
+function initRender() {
     renderGreeting();
-    renderPinnedSites();
-    renderManagedSites();
     renderQuote();
-
-    const isRunning = Boolean(state.timer && state.timer.intervalId);
-    setTimerRunning(isRunning);
-
-    const ms = state.timer && state.timer.endTime > Date.now()
-        ? state.timer.endTime - Date.now()
-        : state.timer.minutes * 60000;
-
-    renderTimerDisplay(Math.max(0, ms));
-
-    updateLinkStatus();
+    renderTimerDisplay();
 }
 
 function pickRandom(items) {
     return items[Math.floor(Math.random() * items.length)];
 }
 
-function randomBetween(min, max) {
-    return Math.random() * (max - min) + min;
-}
-
-function readStorage(key) {
-    try {
-        return localStorage.getItem(key);
-    } catch {
-        return null;
-    }
-}
-
-function writeStorage(key, value) {
-    try {
-        if (value === null) {
-            localStorage.removeItem(key);
-            return true;
-        }
-
-        localStorage.setItem(key, value);
-        return true;
-    } catch {
-        // Keep the dashboard usable even if storage is unavailable.
-        return false;
-    }
-}
-
 function readBackgroundCache() {
-    const cachedValue = readStorageJSON(backgroundCacheStorageKey);
+    const cachedValue = store.get(backgroundCacheStorageKey, null);
 
     if (
         !cachedValue ||
@@ -226,121 +203,33 @@ function readBackgroundCache() {
     return cachedValue;
 }
 
-function writeBackgroundCache(value) {
-    return writeStorage(
-        backgroundCacheStorageKey,
-        value ? JSON.stringify(value) : null,
-    );
-}
-
-function blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-
-        reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-                resolve(reader.result);
-                return;
-            }
-
-            reject(new Error('Background conversion failed.'));
-        };
-
-        reader.onerror = () => {
-            reject(new Error('Background conversion failed.'));
-        };
-
-        reader.readAsDataURL(blob);
-    });
-}
-
-async function compressImageBlobToDataUrl(blob, maxWidth = 1600, quality = 0.7) {
-    try {
-        const imgBitmap = await createImageBitmap(blob);
-
-        const scale = Math.min(1, maxWidth / imgBitmap.width);
-        const targetWidth = Math.max(1, Math.round(imgBitmap.width * scale));
-        const targetHeight = Math.max(1, Math.round(imgBitmap.height * scale));
-
-        if (typeof OffscreenCanvas !== 'undefined') {
-            const off = new OffscreenCanvas(targetWidth, targetHeight);
-            const ctx = off.getContext('2d');
-            ctx.drawImage(imgBitmap, 0, 0, targetWidth, targetHeight);
-            if (off.convertToBlob) {
-                const outBlob = await off.convertToBlob({ type: 'image/jpeg', quality });
-                return blobToDataUrl(outBlob);
-            }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(imgBitmap, 0, 0, targetWidth, targetHeight);
-        return canvas.toDataURL('image/jpeg', quality);
-    } catch (err) {
-        throw err;
-    }
-}
-
-async function fetchBackgroundDataUrl(url) {
-    const response = await fetch(url, {
-        cache: 'no-store',
-        mode: 'cors',
-    });
-
-    if (!response.ok) {
-        throw new Error(`Background request failed with ${response.status}.`);
-    }
-
-    const blob = await response.blob();
-
-    try {
-        // Attempt lightweight compression/resizing to save storage and bandwidth
-        return await compressImageBlobToDataUrl(blob, 1600, 0.7);
-    } catch (err) {
-        // Fallback to raw data URL if compression fails
-        return blobToDataUrl(blob);
-    }
-}
-
-function readStorageJSON(key) {
-    const rawValue = readStorage(key);
-
-    if (!rawValue) {
-        return null;
-    }
-
-    try {
-        return JSON.parse(rawValue);
-    } catch {
-        return null;
-    }
-}
-
 function setBackground(url) {
-    backgroundElement.style.backgroundImage = `url("${url}")`;
+    if (!el.bg) return;
+    el.bg.style.backgroundImage = `url("${url}")`;
 }
 
 function normalizeUrl(value) {
     let urlValue = value.trim();
 
-    if (!urlValue) {
-        return null;
-    }
+    if (!urlValue) return null;
 
     if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(urlValue)) {
         urlValue = `https://${urlValue}`;
     }
 
+    const url = safeUrl(urlValue);
+    if (!url) return null;
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+        return null;
+    }
+
+    return url.href;
+}
+
+function safeUrl(href) {
     try {
-        const url = new URL(urlValue);
-
-        if (!['http:', 'https:'].includes(url.protocol)) {
-            return null;
-        }
-
-        return url.href;
+        return new URL(href);
     } catch {
         return null;
     }
@@ -351,14 +240,16 @@ function createSiteLabel(label, href) {
         return label.trim();
     }
 
-    const hostname = new URL(href).hostname.replace(/^www\./, '');
+    const url = safeUrl(href);
+    const hostname = url ? url.hostname.replace(/^www\./, '') : 'site';
     const firstChunk = hostname.split('.')[0] || hostname;
     return firstChunk.charAt(0).toUpperCase() + firstChunk.slice(1);
 }
 
 function sanitizePinnedSites(links) {
     if (!Array.isArray(links)) {
-        return defaultQuickLinks.slice(0, maxPinnedSites);
+        // Stored value is not an array — fail safely by returning an empty list.
+        return [];
     }
 
     const seen = new Set();
@@ -386,36 +277,18 @@ function sanitizePinnedSites(links) {
         .slice(0, maxPinnedSites);
 }
 
-function loadPinnedSites() {
-    const storedLinks = readStorageJSON(linksStorageKey);
-    const sourceLinks = storedLinks === null ? defaultQuickLinks : storedLinks;
-    const sanitizedLinks = sanitizePinnedSites(sourceLinks);
-
-    if (storedLinks === null) {
-        return sanitizedLinks.length
-            ? sanitizedLinks
-            : sanitizePinnedSites(defaultQuickLinks);
-    }
-
-    return sanitizedLinks;
-}
-
-function savePinnedSites() {
-    writeStorage(linksStorageKey, JSON.stringify(state.links));
-}
-
-function clampMinutes(value) {
-    if (!Number.isFinite(value)) {
-        return null;
-    }
-
-    const clampedValue = Math.min(180, Math.max(5, value));
-    return Math.round(clampedValue / 5) * 5;
+function clampMinutes(value, fallback = 25) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.round(Math.min(180, Math.max(5, value)) / 5) * 5;
 }
 
 function loadFocusMinutes() {
-    const storedValue = Number(readStorage(focusMinutesStorageKey));
-    return clampMinutes(storedValue) || 25;
+    const raw = store.get(focusMinutesStorageKey, null);
+    return raw === null ? 25 : clampMinutes(Number(raw));
+}
+
+function loadPinnedSites() {
+    return sanitizePinnedSites(store.get(linksStorageKey, []));
 }
 
 function hashString(value) {
@@ -429,119 +302,161 @@ function hashString(value) {
 }
 
 function faviconDataUrl(label, href) {
-    const hostname = new URL(href).hostname.replace(/^www\./, '');
+    const url = safeUrl(href);
+    const hostname = url ? url.hostname.replace(/^www\./, '') : 'site';
+
     const initial = (label.trim()[0] || hostname[0] || '?').toUpperCase();
     const hue = hashString(hostname) % 360;
+
     const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-      <rect width="64" height="64" rx="18" fill="hsl(${hue} 28% 17%)"/>
-      <rect x="2" y="2" width="60" height="60" rx="16" fill="none" stroke="hsla(${hue} 70% 80% / 0.28)"/>
-      <text
-        x="32"
-        y="38"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="18" fill="hsl(${hue} 28% 17%)"/>
+  <rect x="2" y="2" width="60" height="60" rx="16"
+        fill="none" stroke="hsla(${hue} 70% 80% / 0.28)"/>
+  <text x="32" y="38"
         text-anchor="middle"
-        font-family="Inter, system-ui, sans-serif"
+        font-family="system-ui, sans-serif"
         font-size="28"
         font-weight="600"
-        fill="hsla(${hue} 90% 94% / 0.94)"
-      >${initial}</text>
-    </svg>
-  `.trim();
+        fill="hsla(${hue} 90% 94% / 0.94)">
+    ${initial}
+  </text>
+</svg>
+`.trim();
 
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function faviconRemoteUrl(href) {
-    const hostname = new URL(href).hostname.replace(/^www\./, '');
+    const url = safeUrl(href);
+    const hostname = url ? url.hostname.replace(/^www\./, '') : 'site';
     return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
 }
 
-function faviconCandidateUrls(href) {
-    const url = new URL(href);
-    const hostname = url.hostname.replace(/^www\./, '');
-    const origin = url.origin;
-    const specialCases = {
-        'mail.google.com': [
+/**
+ * Site-specific favicon overrides.
+ * Useful when automatic favicon lookup returns generic or incorrect icons.
+ */
+function getDomainOverrides(hostname) {
+    const map = {
+        'mail.google.com':
             'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
-            'https://mail.google.com/favicon.ico',
-        ],
-        'calendar.google.com': [
+        'calendar.google.com':
             'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_31.ico',
-            'https://calendar.google.com/favicon.ico',
-        ],
-        'drive.google.com': [
+        'drive.google.com':
             'https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png',
-            'https://drive.google.com/favicon.ico',
-        ],
-        'github.com': [
-            'https://github.githubassets.com/favicons/favicon.svg',
-            'https://github.com/favicon.ico',
-        ],
-        'youtube.com': [
-            'https://www.youtube.com/s/desktop/fe69d6d0/img/logos/favicon_32x32.png',
-            'https://www.youtube.com/favicon.ico',
-        ],
-        'notion.so': ['https://www.notion.so/front-static/favicon.ico'],
-        'maps.google.com': [
-            'https://maps.gstatic.com/favicon3/poi_maps.ico',
-            'https://maps.google.com/maps/favicon.ico',
-            'https://maps.google.com/favicon.ico',
-        ],
-        'www.google.com': ['https://www.google.com/favicon.ico'],
-        'google.com': ['https://www.google.com/favicon.ico'],
+        'maps.google.com': 'https://maps.gstatic.com/favicon3/poi_maps.ico',
+        'github.com': 'https://github.githubassets.com/favicons/favicon.svg',
+        'youtube.com':
+            'https://www.youtube.com/s/desktop/fe69d6d0/img/favicon_32x32.png',
+        'notion.so': 'https://www.notion.so/images/favicon.ico',
     };
 
-    return [
-        ...(specialCases[hostname] || []),
+    return map[hostname] || null;
+}
+
+function faviconCandidateUrls(href) {
+    const url = safeUrl(href);
+    const hostname = url ? url.hostname.replace(/^www\./, '') : null;
+    const origin = url ? url.origin : null;
+
+    const candidates = [];
+
+    if (!hostname || !origin) {
+        return [faviconRemoteUrl(href)];
+    }
+
+    const override = getDomainOverrides(hostname);
+
+    if (override) candidates.push(override);
+
+    if (!hostname.endsWith('google.com')) {
+        candidates.push(
+            `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
+        );
+    }
+
+    candidates.push(faviconRemoteUrl(href));
+
+    candidates.push(
         `${origin}/favicon.ico`,
+        `${origin}/favicon.png`,
+        `${origin}/favicon.svg`,
         `${origin}/apple-touch-icon.png`,
-        faviconRemoteUrl(href),
-    ];
+    );
+
+    return candidates;
 }
 
 function applyFavicon(imageElement, label, href) {
+    imageElement.decoding = 'async';
+    imageElement.loading = 'lazy';
+
     const candidates = faviconCandidateUrls(href);
     let index = 0;
 
+    // Stop attempting further candidates and clear event handlers.
+    const cleanup = () => {
+        imageElement.onload = null;
+        imageElement.onerror = null;
+    };
+
     const tryNext = () => {
         if (index >= candidates.length) {
-            imageElement.onerror = null;
+            cleanup();
             imageElement.src = faviconDataUrl(label, href);
             return;
         }
 
-        imageElement.src = candidates[index];
-        index += 1;
+        imageElement.src = candidates[index++];
+    };
+
+    imageElement.onload = () => {
+        if (imageElement.naturalWidth > 0) {
+            cleanup();
+            return;
+        }
+        tryNext();
     };
 
     imageElement.onerror = tryNext;
+
     tryNext();
 }
 
-function updateLinkStatus(message = `Up to ${maxPinnedSites} pinned sites.`) {
-    linkStatusElement.textContent = message;
+function updateLinkStatus() {
+    if (!el.linkStatus) return;
+
+    const count = state.links.length;
+    el.linkStatus.textContent =
+        count >= maxPinnedSites
+            ? `Limit reached (${maxPinnedSites})`
+            : `${count}/${maxPinnedSites} pinned sites`;
 }
 
 function updateClock() {
+    if (!el.clock) return;
     const formatter = new Intl.DateTimeFormat([], {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
+        hour12: use12Hour,
     });
-
-    clockElement.textContent = formatter.format(new Date());
+    el.clock.textContent = formatter.format(new Date());
     renderGreeting();
 }
+
+let clockInterval = null;
 
 function startClock() {
     updateClock();
 
     const now = new Date();
-    const delay = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    const delay = (60 - now.getSeconds()) * TICK_RATE - now.getMilliseconds();
 
     window.setTimeout(() => {
         updateClock();
-        window.setInterval(updateClock, 60000);
+        if (clockInterval) clearInterval(clockInterval);
+        clockInterval = setInterval(updateClock, 60000);
     }, delay);
 }
 
@@ -566,144 +481,168 @@ function getGreetingPeriod(date) {
 function renderGreeting() {
     const now = new Date();
     const period = getGreetingPeriod(now);
-    const greetingKey = `${period}-${now.toDateString()}`;
 
-    if (cachedGreeting.key !== greetingKey) {
-        cachedGreeting.key = greetingKey;
+    if (cachedGreeting.key !== period) {
+        cachedGreeting.key = period;
         cachedGreeting.text = pickRandom(greetingVariants[period]);
     }
 
     const nickname = state.nickname.trim() || 'friend';
-    greetingElement.textContent = `${cachedGreeting.text}, ${nickname}.`;
+    if (el.greeting)
+        el.greeting.textContent = `${cachedGreeting.text}, ${nickname}.`;
 }
+
+let currentQuote = null;
 
 function renderQuote() {
-    const quote = pickRandom(quotes);
-    quoteTextElement.textContent = `"${quote.text}"`;
-    quoteAuthorElement.textContent = quote.author;
-}
-
-function renderPinnedSites() {
-    const fragment = document.createDocumentFragment();
-
-    state.links.forEach(({ label, href }) => {
-        const link = document.createElement('a');
-        link.className = 'pinned-site';
-        link.href = href;
-        link.title = label;
-
-        const favicon = document.createElement('span');
-        favicon.className = 'pinned-site__favicon';
-
-        const faviconImage = document.createElement('img');
-        applyFavicon(faviconImage, label, href);
-        faviconImage.alt = '';
-        faviconImage.width = 18;
-        faviconImage.height = 18;
-
-        const text = document.createElement('span');
-        text.className = 'pinned-site__label';
-        text.textContent = label;
-
-        favicon.appendChild(faviconImage);
-        link.append(favicon, text);
-        fragment.appendChild(link);
-    });
-
-    linksElement.replaceChildren(fragment);
-}
-
-function renderManagedSites() {
-    if (!state.links.length) {
-        const emptyState = document.createElement('p');
-        emptyState.className = 'menu__empty';
-        emptyState.textContent = 'No pinned sites yet.';
-        linkManagerElement.replaceChildren(emptyState);
-        return;
+    if (!currentQuote) {
+        currentQuote = pickRandom(quotes);
     }
 
-    const fragment = document.createDocumentFragment();
-
-    state.links.forEach(({ label, href }, index) => {
-        const row = document.createElement('div');
-        row.className = 'menu__site';
-
-        const meta = document.createElement('div');
-        meta.className = 'menu__site-meta';
-
-        const favicon = document.createElement('span');
-        favicon.className = 'pinned-site__favicon';
-
-        const faviconImage = document.createElement('img');
-        applyFavicon(faviconImage, label, href);
-        faviconImage.alt = '';
-        faviconImage.width = 18;
-        faviconImage.height = 18;
-        favicon.appendChild(faviconImage);
-
-        const copy = document.createElement('div');
-
-        const siteName = document.createElement('span');
-        siteName.className = 'menu__site-name';
-        siteName.textContent = label;
-
-        const siteHost = document.createElement('span');
-        siteHost.className = 'menu__site-host';
-        siteHost.textContent = new URL(href).hostname.replace(/^www\./, '');
-
-        copy.append(siteName, siteHost);
-
-        const removeButton = document.createElement('button');
-        removeButton.className = 'menu__remove';
-        removeButton.type = 'button';
-        removeButton.dataset.removeIndex = String(index);
-        removeButton.textContent = 'Remove';
-
-        meta.append(favicon, copy);
-        row.append(meta, removeButton);
-        fragment.appendChild(row);
-    });
-
-    linkManagerElement.replaceChildren(fragment);
+    if (el.quoteText) el.quoteText.textContent = `"${currentQuote.text}"`;
+    if (el.quoteAuthor) el.quoteAuthor.textContent = currentQuote.author;
 }
 
-function hydrateNotes() {
-    notesElement.value = readStorage(notesStorageKey) || '';
+function renderLinks() {
+    const pins = document.createDocumentFragment();
+    const manager = document.createDocumentFragment();
 
-    notesElement.addEventListener('input', () => {
-        writeStorage(notesStorageKey, notesElement.value);
+    state.links.forEach(({ label, href }, i) => {
+        const createFaviconImg = () => {
+            const img = create('img', { width: 18, height: 18, alt: '' });
+            applyFavicon(img, label, href);
+            return img;
+        };
+
+        // pinned
+        if (el.links) {
+            pins.appendChild(
+                create(
+                    'a',
+                    { className: 'pinned-site', href, title: label },
+                    create(
+                        'span',
+                        { className: 'pinned-site__favicon' },
+                        createFaviconImg(),
+                    ),
+                    create('span', {
+                        className: 'pinned-site__label',
+                        textContent: label,
+                    }),
+                ),
+            );
+        }
+
+        // manager
+        if (el.linkManager) {
+            const url = safeUrl(href);
+            const hostname = url ? url.hostname.replace(/^www\./, '') : href;
+
+            manager.appendChild(
+                create(
+                    'div',
+                    { className: 'menu__site' },
+                    create(
+                        'div',
+                        { className: 'menu__site-meta' },
+                        create(
+                            'span',
+                            { className: 'pinned-site__favicon' },
+                            createFaviconImg(),
+                        ),
+                        create(
+                            'div',
+                            {},
+                            create('span', {
+                                className: 'menu__site-name',
+                                textContent: label,
+                            }),
+                            create('span', {
+                                className: 'menu__site-host',
+                                textContent: hostname,
+                            }),
+                        ),
+                    ),
+                    (() => {
+                        const btn = create('button', {
+                            className: 'menu__remove',
+                            textContent: 'Remove',
+                        });
+                        btn.dataset.removeIndex = i;
+                        return btn;
+                    })(),
+                ),
+            );
+        }
     });
+
+    el.links?.replaceChildren(pins);
+
+    el.linkManager?.replaceChildren(
+        state.links.length
+            ? manager
+            : create('p', {
+                  className: 'menu__empty',
+                  textContent: 'No pinned sites yet.',
+              }),
+    );
+
+    updateLinkStatus();
 }
 
-function hydrateNickname() {
-    nicknameInputElement.value = state.nickname;
+const Notes = {
+    init() {
+        const { notes } = el;
+        if (!notes) return;
 
-    nameFormElement.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const nickname = nicknameInputElement.value.trim();
-        setState({ nickname });
-        writeStorage(nicknameStorageKey, nickname || null);
-    });
-}
+        notes.value = store.get(notesStorageKey, '');
+        let timeout;
+        notes.oninput = () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                store.set(notesStorageKey, notes.value);
+            }, 200);
+        };
+    },
+};
+
+const Nickname = {
+    init() {
+        const input = el.nicknameInput;
+        const form = el.nameForm;
+        if (!input || !form) return;
+
+        input.value = state.nickname;
+
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            state.nickname = input.value.trim();
+            store.set(nicknameStorageKey, state.nickname || null);
+            renderGreeting();
+        };
+    },
+};
 
 function setMenuOpen(isOpen) {
-    menuElement.classList.toggle('is-open', isOpen);
-    menuToggleElement.setAttribute('aria-expanded', String(isOpen));
-    menuElement.setAttribute('aria-hidden', String(!isOpen));
+    if (!el.menu || !el.menuToggle) return;
+    el.menu.classList.toggle('is-open', isOpen);
+    el.menuToggle.setAttribute('aria-expanded', String(isOpen));
+    el.menu.setAttribute('aria-hidden', String(!isOpen));
 }
 
 function hydrateMenu() {
-    menuToggleElement.addEventListener('click', () => {
-        const isOpen =
-            menuToggleElement.getAttribute('aria-expanded') !== 'true';
+    if (!el.menu || !el.menuToggle) return;
+
+    el.menuToggle.addEventListener('click', () => {
+        const isOpen = el.menuToggle.getAttribute('aria-expanded') !== 'true';
         setMenuOpen(isOpen);
     });
 
     document.addEventListener('click', (event) => {
         if (
-            menuToggleElement.getAttribute('aria-expanded') === 'true' &&
-            !menuElement.contains(event.target) &&
-            !menuToggleElement.contains(event.target)
+            el.menuToggle.getAttribute('aria-expanded') === 'true' &&
+            !el.menu.contains(event.target) &&
+            !el.menuToggle.contains(event.target)
         ) {
             setMenuOpen(false);
         }
@@ -715,132 +654,139 @@ function hydrateMenu() {
             return;
         }
 
-        // Toggle menu with '/' when not typing in an input
-        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        // Quick toggle: press '/' to open/close the menu when focus is not in an input.
+        if (
+            event.key === '/' &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey
+        ) {
             const target = event.target;
-            const tag = target && target.tagName && target.tagName.toLowerCase();
+            const tag =
+                target && target.tagName && target.tagName.toLowerCase();
             const isEditable =
-                target && (target.isContentEditable || tag === 'input' || tag === 'textarea');
+                target &&
+                (target.isContentEditable ||
+                    tag === 'input' ||
+                    tag === 'textarea');
 
             if (!isEditable) {
                 event.preventDefault();
-                const isOpen = menuToggleElement.getAttribute('aria-expanded') === 'true';
+                const isOpen =
+                    el.menuToggle.getAttribute('aria-expanded') === 'true';
                 setMenuOpen(!isOpen);
-                menuToggleElement.focus();
+                el.menuToggle.focus();
             }
         }
     });
 }
 
-function hydratePinnedSites() {
-    renderPinnedSites();
-    renderManagedSites();
-    updateLinkStatus();
+const PinnedSites = {
+    init() {
+        const form = el.linkForm;
+        const list = el.linkManager;
 
-    linkFormElement.addEventListener('submit', (event) => {
-        event.preventDefault();
+        this.render();
 
-        if (state.links.length >= maxPinnedSites) {
-            updateLinkStatus(
-                'Pinned list is full. Remove one before adding another.',
-            );
-            return;
-        }
+        if (!form || !list) return;
 
-        const href = normalizeUrl(linkUrlElement.value);
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            if (state.links.length >= maxPinnedSites) return;
 
-        if (!href) {
-            updateLinkStatus('Enter a valid web address.');
-            return;
-        }
+            const href = normalizeUrl(el.linkUrl.value);
+            if (!href) {
+                el.linkStatus &&
+                    (el.linkStatus.textContent = 'Enter a valid URL.');
+                return;
+            }
+            if (state.links.some((l) => l.href === href)) {
+                el.linkStatus &&
+                    (el.linkStatus.textContent = 'Already pinned.');
+                return;
+            }
 
-        if (state.links.some((link) => link.href === href)) {
-            updateLinkStatus('That site is already pinned.');
-            return;
-        }
+            const label = createSiteLabel(el.linkLabel.value, href);
 
-        const label = createSiteLabel(linkLabelElement.value, href);
+            state.links = sanitizePinnedSites([
+                ...state.links,
+                { label, href },
+            ]);
 
-        const newLinks = state.links.concat({ label, href });
-        setState(() => ({ links: newLinks }));
-        savePinnedSites();
-        updateLinkStatus(`${label} is now pinned.`);
+            store.set(linksStorageKey, state.links);
+            el.linkLabel.value = '';
+            el.linkUrl.value = '';
+            el.linkUrl.focus();
+            this.render();
+        };
 
-        linkLabelElement.value = '';
-        linkUrlElement.value = '';
-        linkUrlElement.focus();
-    });
+        list.onclick = (e) => {
+            const btn = e.target.closest('[data-remove-index]');
+            if (!btn) return;
 
-    linkManagerElement.addEventListener('click', (event) => {
-        const removeButton = event.target.closest('[data-remove-index]');
+            const i = Number(btn.dataset.removeIndex);
+            state.links.splice(i, 1);
 
-        if (!removeButton) {
-            return;
-        }
+            store.set(linksStorageKey, state.links);
+            this.render();
+        };
+    },
 
-        const index = Number(removeButton.dataset.removeIndex);
-
-        if (!Number.isInteger(index)) {
-            return;
-        }
-
-        const removedLink = state.links[index];
-        const newLinks = state.links.slice(0, index).concat(state.links.slice(index + 1));
-        setState(() => ({ links: newLinks }));
-        savePinnedSites();
-        updateLinkStatus(`${removedLink.label} was removed.`);
-    });
-}
+    render() {
+        renderLinks();
+    },
+};
 
 function formatDuration(milliseconds) {
-    const totalSeconds = Math.ceil(Math.max(0, milliseconds) / 1000);
+    const totalSeconds = Math.ceil(Math.max(0, milliseconds) / TICK_RATE);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
 
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function renderTimerDisplay(milliseconds = state.timer.minutes * 60000) {
-    timerDisplayElement.textContent = formatDuration(milliseconds);
+function renderTimerDisplay(ms = state.timer.minutes * 60000) {
+    if (!el.timerDisplay) return;
+    el.timerDisplay.textContent = formatDuration(ms);
 }
 
-function syncTimerInput(nextMinutes = Number(timerInputElement.value)) {
-    const minutes = clampMinutes(nextMinutes) || state.timer.minutes;
-    timerInputElement.value = String(minutes);
-    writeStorage(focusMinutesStorageKey, String(minutes));
-    setState(() => ({ timer: { minutes } }));
+function syncTimerInput(nextMinutes) {
+    if (!el.timerInput) return;
+
+    const minutes = clampMinutes(nextMinutes ?? Number(el.timerInput.value));
+
+    el.timerInput.value = String(minutes);
+    state.timer.minutes = minutes;
+    store.set(focusMinutesStorageKey, minutes);
+
+    renderTimerDisplay(minutes * 60000);
 }
 
 function stepTimerMinutes(direction) {
-    const currentMinutes =
-        clampMinutes(Number(timerInputElement.value)) || state.timer.minutes;
-    const nextMinutes =
-        clampMinutes(currentMinutes + direction * 5) || currentMinutes;
-    syncTimerInput(nextMinutes);
+    const current = clampMinutes(
+        Number(el.timerInput.value || state.timer.minutes),
+    );
+    const next = clampMinutes(current + direction * 5);
+    syncTimerInput(next);
 }
 
 function setTimerRunning(isRunning) {
-    focusTimerElement.classList.toggle('is-running', isRunning);
-    timerStartButtonElement.disabled = isRunning;
-    timerStopButtonElement.disabled = !isRunning;
-    timerInputElement.disabled = isRunning;
-    timerDecreaseButtonElement.disabled = isRunning;
-    timerIncreaseButtonElement.disabled = isRunning;
+    el.timer?.classList.toggle('is-running', isRunning);
+    el.timerStart && (el.timerStart.disabled = isRunning);
+    el.timerStop && (el.timerStop.disabled = !isRunning);
+    el.timerInput && (el.timerInput.disabled = isRunning);
+    el.timerDec && (el.timerDec.disabled = isRunning);
+    el.timerInc && (el.timerInc.disabled = isRunning);
 }
 
 async function ensureAudioContext() {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
 
-    if (!AudioContextCtor) {
-        return null;
-    }
+    if (!AudioContextCtor) return null;
 
-    if (!state.timer.audioContext) {
-        const ctx = new AudioContextCtor();
-        setState(() => ({ timer: { audioContext: ctx } }));
+    if (!audioCtx) {
+        audioCtx = new AudioContextCtor();
     }
-
-    const audioCtx = state.timer.audioContext;
 
     if (audioCtx && audioCtx.state === 'suspended') {
         try {
@@ -888,19 +834,22 @@ function stopFocusTimer({ playSound = false } = {}) {
         window.clearInterval(state.timer.intervalId);
     }
 
-    setState(() => ({ timer: { endTime: 0, intervalId: null } }));
-    writeStorage(focusEndStorageKey, null);
+    state.timer.intervalId = null;
+    state.timer.endTime = 0;
+    store.set(focusEndStorageKey, null);
 
-    if (playSound) {
-        void playExpirySound();
-    }
+    setTimerRunning(false);
+
+    renderTimerDisplay();
+
+    if (playSound) void playExpirySound();
 }
 
 function tickFocusTimer() {
     const remainingMilliseconds = state.timer.endTime - Date.now();
 
     if (remainingMilliseconds <= 0) {
-        renderTimerDisplay(0);
+        renderTimerDisplay();
         stopFocusTimer({ playSound: true });
         return;
     }
@@ -919,132 +868,94 @@ function startFocusTimer(event) {
     void ensureAudioContext();
 
     const endTime = Date.now() + state.timer.minutes * 60000;
-
+    state.timer.endTime = endTime;
+    state.timer.intervalId = window.setInterval(tickFocusTimer, TICK_RATE);
+    store.set(focusEndStorageKey, endTime);
+    setTimerRunning(true);
     tickFocusTimer();
-    const id = window.setInterval(tickFocusTimer, 250);
-
-    setState(() => ({ timer: { endTime, intervalId: id } }));
-    writeStorage(focusEndStorageKey, String(endTime));
 }
 
-function hydrateFocusTimer() {
-    syncTimerInput(state.timer.minutes);
-    renderTimerDisplay();
-    setTimerRunning(false);
+const Timer = {
+    init() {
+        // Make UI reflect the currently configured timer minutes.
+        syncTimerInput(state.timer.minutes);
 
-    timerInputElement.addEventListener('change', syncTimerInput);
-    timerInputElement.addEventListener('blur', syncTimerInput);
-    timerDecreaseButtonElement.addEventListener('click', () => {
-        stepTimerMinutes(-1);
-    });
-    timerIncreaseButtonElement.addEventListener('click', () => {
-        stepTimerMinutes(1);
-    });
-    timerFormElement.addEventListener('submit', startFocusTimer);
-    timerStopButtonElement.addEventListener('click', () => {
-        stopFocusTimer();
-    });
-
-    // Resume persisted timer if present
-    const storedEnd = Number(readStorage(focusEndStorageKey));
-    if (Number.isFinite(storedEnd) && storedEnd > Date.now()) {
-        if (!state.timer.intervalId) {
-            tickFocusTimer();
-            const id = window.setInterval(tickFocusTimer, 250);
-            setState(() => ({ timer: { endTime: storedEnd, intervalId: id } }));
+        if (el.timerInput) {
+            el.timerInput.addEventListener('change', () => syncTimerInput());
+            el.timerInput.addEventListener('blur', () => syncTimerInput());
         }
-    } else {
-        writeStorage(focusEndStorageKey, null);
-    }
-}
 
-function applyParticleStyles(element, styles) {
-    Object.entries(styles).forEach(([property, value]) => {
-        element.style.setProperty(property, value);
-    });
-}
+        if (el.timerDec) {
+            el.timerDec.addEventListener('click', () => {
+                stepTimerMinutes(-1);
+            });
+        }
+
+        if (el.timerInc) {
+            el.timerInc.addEventListener('click', () => {
+                stepTimerMinutes(1);
+            });
+        }
+
+        if (el.timer) el.timer.addEventListener('submit', startFocusTimer);
+        if (el.timerStop)
+            el.timerStop.addEventListener('click', () => {
+                stopFocusTimer();
+            });
+
+        // Restore an in-progress timer from storage if it hasn't expired.
+        const storedEnd = Number(store.get(focusEndStorageKey, null));
+        if (
+            Number.isFinite(storedEnd) &&
+            storedEnd > Date.now() &&
+            !state.timer.intervalId
+        ) {
+            setTimerRunning(true);
+            state.timer.endTime = storedEnd;
+            state.timer.intervalId = window.setInterval(
+                tickFocusTimer,
+                TICK_RATE,
+            );
+            tickFocusTimer();
+        } else {
+            store.set(focusEndStorageKey, null);
+        }
+    },
+};
 
 function hydrateGlassPointerGlow() {
+    // Subtle pointer-following glow on glass UI elements.
     glassElements.forEach((element) => {
+        if (!element) return;
         element.style.setProperty('--pointer-x', '50%');
         element.style.setProperty('--pointer-y', '50%');
         element.style.setProperty('--pointer-alpha', '0');
         if (prefersReducedMotion) return;
 
-        element.addEventListener('pointermove', (event) => {
+        const onPointerMove = (event) => {
             const bounds = element.getBoundingClientRect();
-            const x = event.clientX - bounds.left;
-            const y = event.clientY - bounds.top;
-
-            element.style.setProperty('--pointer-x', `${x}px`);
-            element.style.setProperty('--pointer-y', `${y}px`);
+            element.style.setProperty(
+                '--pointer-x',
+                `${event.clientX - bounds.left}px`,
+            );
+            element.style.setProperty(
+                '--pointer-y',
+                `${event.clientY - bounds.top}px`,
+            );
             element.style.setProperty('--pointer-alpha', '1');
-        });
+        };
 
-        element.addEventListener('pointerleave', () => {
+        const onPointerLeave = () => {
             element.style.setProperty('--pointer-x', '50%');
             element.style.setProperty('--pointer-y', '50%');
             element.style.setProperty('--pointer-alpha', '0');
+        };
+
+        element.addEventListener('pointermove', onPointerMove, {
+            passive: true,
         });
+        element.addEventListener('pointerleave', onPointerLeave);
     });
-}
-
-function renderAtmosphere() {
-    if (prefersReducedMotion) {
-        atmosphereElement.replaceChildren();
-        return;
-    }
-    const fragment = document.createDocumentFragment();
-    const layers = [
-        { type: 'haze', count: 4 },
-        { type: 'streak', count: 6 },
-        { type: 'firefly', count: 10 },
-    ];
-
-    layers.forEach(({ type, count }) => {
-        for (let index = 0; index < count; index += 1) {
-            const particle = document.createElement('span');
-            particle.className = `atmosphere__particle atmosphere__particle--${type}`;
-
-            if (type === 'firefly') {
-                applyParticleStyles(particle, {
-                    '--left': `${randomBetween(4, 96).toFixed(2)}%`,
-                    '--top': `${randomBetween(8, 88).toFixed(2)}%`,
-                    '--size': `${randomBetween(0.18, 0.42).toFixed(2)}rem`,
-                    '--duration': `${randomBetween(9, 18).toFixed(2)}s`,
-                    '--delay': `${randomBetween(-16, 0).toFixed(2)}s`,
-                    '--drift-x': `${randomBetween(-2.2, 2.2).toFixed(2)}rem`,
-                    '--drift-y': `${randomBetween(-3.5, 3.5).toFixed(2)}rem`,
-                    '--opacity': `${randomBetween(0.2, 0.44).toFixed(2)}`,
-                });
-            } else if (type === 'streak') {
-                applyParticleStyles(particle, {
-                    '--left': `${randomBetween(-8, 88).toFixed(2)}%`,
-                    '--top': `${randomBetween(10, 80).toFixed(2)}%`,
-                    '--width': `${randomBetween(12, 24).toFixed(2)}rem`,
-                    '--duration': `${randomBetween(18, 30).toFixed(2)}s`,
-                    '--delay': `${randomBetween(-24, 0).toFixed(2)}s`,
-                    '--angle': `${randomBetween(-18, 18).toFixed(2)}deg`,
-                    '--opacity': `${randomBetween(0.08, 0.18).toFixed(2)}`,
-                });
-            } else {
-                applyParticleStyles(particle, {
-                    '--left': `${randomBetween(0, 82).toFixed(2)}%`,
-                    '--top': `${randomBetween(0, 72).toFixed(2)}%`,
-                    '--size': `${randomBetween(12, 28).toFixed(2)}rem`,
-                    '--duration': `${randomBetween(18, 34).toFixed(2)}s`,
-                    '--delay': `${randomBetween(-30, 0).toFixed(2)}s`,
-                    '--drift-x': `${randomBetween(-4, 4).toFixed(2)}rem`,
-                    '--drift-y': `${randomBetween(-3, 3).toFixed(2)}rem`,
-                    '--opacity': `${randomBetween(0.06, 0.12).toFixed(2)}`,
-                });
-            }
-
-            fragment.appendChild(particle);
-        }
-    });
-
-    atmosphereElement.replaceChildren(fragment);
 }
 
 function loadBackground() {
@@ -1058,38 +969,91 @@ function loadBackground() {
     }
 
     const remoteBackground = `https://picsum.photos/1600/900?random=${Date.now()}`;
-    const fallbackBackground =
-        cachedBackground && typeof cachedBackground.dataUrl === 'string'
-            ? cachedBackground.dataUrl
-            : localFallback;
+
+    const fallbackBackground = cachedBackground?.dataUrl || localFallback;
 
     setBackground(fallbackBackground);
 
-    window.setTimeout(async () => {
+    (async () => {
         try {
-            const dataUrl = await fetchBackgroundDataUrl(remoteBackground);
-            setBackground(dataUrl);
-            const ok = writeBackgroundCache({
-                dataUrl,
-                expiresAt: now + backgroundCacheTtlMs,
+            const res = await fetch(remoteBackground, {
+                cache: 'no-store',
+                mode: 'cors',
             });
 
-            if (!ok) {
-                // Caching failed (quota or storage failure) — fail silently.
+            if (!res.ok) return;
+
+            const blob = await res.blob();
+            const bitmap = await createImageBitmap(blob);
+
+            const scale = Math.min(1, 1600 / bitmap.width);
+            const w = Math.max(1, Math.round(bitmap.width * scale));
+            const h = Math.max(1, Math.round(bitmap.height * scale));
+
+            let dataUrl;
+            if (typeof OffscreenCanvas !== 'undefined') {
+                const off = new OffscreenCanvas(w, h);
+                off.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+                const outBlob = await off.convertToBlob({
+                    type: 'image/jpeg',
+                    quality: 0.7,
+                });
+                dataUrl = await new Promise((res, rej) => {
+                    const r = new FileReader();
+                    r.onloadend = () => res(r.result);
+                    r.onerror = rej;
+                    r.readAsDataURL(outBlob);
+                });
+            } else {
+                const c = document.createElement('canvas');
+                c.width = w;
+                c.height = h;
+                c.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+                dataUrl = c.toDataURL('image/jpeg', 0.7);
             }
+
+            setBackground(dataUrl);
+            const fetchedAt = Date.now();
+
+            store.set(backgroundCacheStorageKey, {
+                dataUrl,
+                expiresAt: fetchedAt + backgroundCacheTtlMs,
+            });
         } catch {
-            setBackground(fallbackBackground);
+            // If fetching or processing the remote image fails, keep the current fallback.
         }
-    }, 0);
+    })();
 }
 
-startClock();
-render();
-renderAtmosphere();
-hydrateNotes();
-hydrateNickname();
+initRender();
+
+Notes.init();
+Nickname.init();
 hydrateMenu();
-hydratePinnedSites();
-hydrateFocusTimer();
+PinnedSites.init();
+Timer.init();
 hydrateGlassPointerGlow();
+
 loadBackground();
+startClock();
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.timer.intervalId) return;
+
+    // When tab becomes visible again intervals can be out of sync.
+    // Force a single tick to correct the display and handle expiry.
+    tickFocusTimer();
+});
+
+// Clock click toggles 12h / 24h display; preference is persisted.
+if (el.clock) {
+    // Make it clear the clock is interactive.
+    el.clock.title = 'Toggle 12h / 24h format';
+    el.clock.style.cursor = 'pointer';
+    el.clock.addEventListener('click', () => {
+        use12Hour = !use12Hour;
+        store.set(hour12StorageKey, use12Hour);
+        updateClock();
+    });
+}

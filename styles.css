@@ -1,3 +1,9 @@
+@property --glint-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -5,16 +11,14 @@
   --foreground: rgba(247, 249, 252, 0.96);
   --muted: rgba(226, 233, 248, 0.76);
   --hint: rgba(226, 233, 248, 0.48);
-  --hairline: rgba(255, 255, 255, 0.12);
   --glass: rgba(13, 19, 31, 0.42);
   --glass-strong: rgba(12, 18, 29, 0.62);
   --glass-edge: rgba(255, 255, 255, 0.16);
-  --glass-glow: rgba(169, 190, 255, 0.1);
-  --glass-shadow: rgba(0, 0, 0, 0.34);
+  --glass-glow: rgba(169, 190, 255, 0.06);
+  --glass-shadow: rgba(0, 0, 0, 0.26);
   --accent: #a9beff;
   --accent-glow: rgba(169, 190, 255, 0.42);
   --warm: #f2a67d;
-  --teal: #8ccfc1;
 }
 
 * {
@@ -56,108 +60,6 @@ body {
   background: rgba(5, 8, 13, 0.44);
 }
 
-.atmosphere {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.mist {
-  position: fixed;
-  right: 0;
-  bottom: -4vh;
-  left: 0;
-  z-index: 2;
-  height: 34vh;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0.8;
-}
-
-.mist::before,
-.mist::after {
-  content: "";
-  position: absolute;
-  inset: auto -10% 0;
-  height: 100%;
-  background:
-    radial-gradient(ellipse at 18% 88%, rgba(168, 193, 255, 0.14), rgba(168, 193, 255, 0) 48%),
-    radial-gradient(ellipse at 52% 100%, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 52%),
-    radial-gradient(ellipse at 82% 92%, rgba(140, 207, 193, 0.12), rgba(140, 207, 193, 0) 44%);
-  filter: blur(26px);
-  transform: translate3d(0, 0, 0);
-}
-
-.mist::before {
-  animation:
-    mist-drift-a 38s ease-in-out infinite alternate,
-    mist-breathe-a 14s ease-in-out infinite;
-}
-
-.mist::after {
-  opacity: 0.7;
-  filter: blur(38px);
-  animation:
-    mist-drift-b 52s ease-in-out infinite alternate,
-    mist-breathe-b 18s ease-in-out infinite;
-}
-
-.atmosphere__particle {
-  position: absolute;
-  display: block;
-}
-
-.atmosphere__particle--firefly {
-  left: var(--left);
-  top: var(--top);
-  width: var(--size);
-  height: var(--size);
-  border-radius: 999px;
-  background: rgba(188, 206, 255, var(--opacity));
-  box-shadow: 0 0 12px rgba(188, 206, 255, 0.2);
-  animation:
-    firefly-drift var(--duration) ease-in-out infinite alternate,
-    firefly-glow calc(var(--duration) * 0.58) ease-in-out infinite;
-  animation-delay: var(--delay);
-}
-
-.atmosphere__particle--streak {
-  left: var(--left);
-  top: var(--top);
-  width: var(--width);
-  height: 1px;
-  background:
-    linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0),
-      rgba(172, 193, 255, var(--opacity)),
-      rgba(255, 255, 255, 0)
-    );
-  filter: blur(0.3px);
-  transform: rotate(var(--angle));
-  animation: streak-drift var(--duration) linear infinite;
-  animation-delay: var(--delay);
-}
-
-.atmosphere__particle--haze {
-  left: var(--left);
-  top: var(--top);
-  width: var(--size);
-  height: calc(var(--size) * 0.58);
-  border-radius: 999px;
-  background:
-    radial-gradient(
-      circle at 28% 30%,
-      rgba(155, 188, 255, var(--opacity)),
-      rgba(155, 188, 255, 0) 72%
-    );
-  filter: blur(12px);
-  animation: haze-drift var(--duration) ease-in-out infinite alternate;
-  animation-delay: var(--delay);
-}
-
 .shell {
   position: relative;
   z-index: 2;
@@ -195,6 +97,7 @@ body {
     0 0 32px rgba(0, 0, 0, 0.24),
     0 0 18px rgba(169, 190, 255, 0.06);
   user-select: none;
+  pointer-events: auto;
   -webkit-user-select: none;
 }
 
@@ -246,14 +149,14 @@ body {
   text-decoration: none;
   transition:
     transform 180ms ease,
-    color 180ms ease,
-    text-shadow 180ms ease;
+    color 180ms ease;
+  will-change: transform;
 }
 
 .pinned-site:hover,
 .pinned-site:focus-visible {
   color: var(--foreground);
-  text-shadow: 0 0 18px var(--accent-glow);
+  text-shadow: 0 0 10px var(--accent-glow);
   transform: translateX(0.25rem);
 }
 
@@ -300,6 +203,7 @@ body {
   --pointer-x: 50%;
   --pointer-y: 50%;
   --pointer-alpha: 0;
+  contain: paint;
 }
 
 .focus-timer,
@@ -311,14 +215,14 @@ body {
   background:
     radial-gradient(
       30rem circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
-      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.08)),
-      rgba(169, 190, 255, calc(var(--pointer-alpha, 0) * 0.045)) 18%,
-      rgba(169, 190, 255, calc(var(--pointer-alpha, 0) * 0.018)) 42%,
+      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.05)),
+      rgba(169, 190, 255, calc(var(--pointer-alpha, 0) * 0.028)) 18%,
+      rgba(169, 190, 255, calc(var(--pointer-alpha, 0) * 0.011)) 42%,
       rgba(169, 190, 255, 0) 76%
     ),
     radial-gradient(
       44rem circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
-      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.026)),
+      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.014)),
       rgba(255, 255, 255, 0) 62%
     ),
     var(--glass);
@@ -341,18 +245,20 @@ body {
   background:
     radial-gradient(
       22rem circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
-      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.1)),
-      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.03)) 24%,
+      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.06)),
+      rgba(255, 255, 255, calc(var(--pointer-alpha, 0) * 0.018)) 24%,
       rgba(255, 255, 255, 0) 60%
     ),
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.18),
-      rgba(255, 255, 255, 0.05) 24%,
-      rgba(169, 190, 255, 0.08) 52%,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.03) 24%,
+      rgba(169, 190, 255, 0.05) 52%,
       rgba(255, 255, 255, 0) 72%
     );
-  opacity: 0.8;
+  /* make pointer highlight fade smoothly; keep a small baseline */
+  opacity: calc(0.16 + var(--pointer-alpha, 0) * 0.36);
+  transition: opacity 220ms ease, background 220ms ease;
   pointer-events: none;
 }
 
@@ -363,26 +269,17 @@ body {
   content: "";
   position: absolute;
   inset: -1px;
-  padding: 1px;
+  padding: 3px;
   border-radius: inherit;
-  background:
-    conic-gradient(
-      from 0deg,
+  background: conic-gradient(from var(--glint-angle) at 50% 50%,
       rgba(255, 255, 255, 0) 0deg,
-      rgba(255, 255, 255, 0) 24deg,
-      rgba(255, 255, 255, 0.08) 42deg,
-      rgba(169, 190, 255, 0.16) 56deg,
-      rgba(255, 255, 255, 0.075) 72deg,
-      rgba(255, 255, 255, 0) 92deg,
-      rgba(255, 255, 255, 0) 224deg,
-      rgba(140, 207, 193, 0.08) 238deg,
-      rgba(255, 255, 255, 0.055) 252deg,
-      rgba(255, 255, 255, 0) 268deg,
-      rgba(255, 255, 255, 0) 360deg
-    );
-  opacity: 0.76;
-  filter: blur(0.15px) saturate(124%);
-  animation: glass-glint-rotate 10s linear infinite;
+      rgba(180, 210, 255, 0.18) 16deg,
+      rgba(255, 255, 255, 0.82) 23deg,
+      rgba(180, 210, 255, 0.18) 30deg,
+      rgba(255, 255, 255, 0) 46deg,
+      rgba(255, 255, 255, 0) 360deg);
+  filter: blur(0.4px);
+  animation: glass-border-orbit 9s linear infinite;
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -392,6 +289,26 @@ body {
     linear-gradient(#000 0 0);
   mask-composite: exclude;
   pointer-events: none;
+}
+
+.notes-panel::after {
+  animation-duration: 11s;
+}
+
+.menu::after {
+  animation-duration: 14s;
+}
+
+.menu-toggle::after {
+  animation-duration: 6s;
+}
+
+.focus-timer:hover::after,
+.notes-panel:hover::after,
+.menu:hover::after,
+.menu-toggle:hover::after {
+  opacity: 0;
+  transition: opacity 220ms ease;
 }
 
 .focus-timer > *,
@@ -418,7 +335,8 @@ body {
   transition:
     width 320ms ease,
     padding 320ms ease,
-    box-shadow 320ms ease;
+    box-shadow 320ms ease,
+    background 220ms ease;
 }
 
 .focus-timer.is-running {
@@ -497,7 +415,7 @@ body {
   background: transparent;
   color: var(--foreground);
   font: inherit;
-  text-align: right;
+  text-align: center;
 }
 
 .focus-timer__input:focus {
@@ -536,7 +454,6 @@ body {
   white-space: nowrap;
   opacity: 0;
   transition:
-    flex-basis 280ms ease,
     width 280ms ease,
     opacity 280ms ease,
     margin 280ms ease;
@@ -577,7 +494,7 @@ body {
 .focus-timer__button:hover,
 .focus-timer__button:focus-visible {
   border-color: rgba(169, 190, 255, 0.2);
-  box-shadow: 0 0 18px rgba(169, 190, 255, 0.18);
+  box-shadow: 0 0 10px rgba(169, 190, 255, 0.12);
 }
 
 .focus-timer__button--stop:not(:disabled) {
@@ -702,7 +619,8 @@ body {
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
-    transform 180ms ease;
+    transform 180ms ease,
+    background 220ms ease;
 }
 
 .menu-toggle:hover,
@@ -711,8 +629,8 @@ body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 16px 36px rgba(0, 0, 0, 0.26),
-    0 0 18px rgba(169, 190, 255, 0.14);
-  transform: translateY(-1px);
+    0 0 10px rgba(169, 190, 255, 0.10);
+  transform: translateY(-0.5px);
 }
 
 .menu-toggle span {
@@ -742,7 +660,8 @@ body {
   transform: translateY(0.9rem);
   transition:
     opacity 180ms ease,
-    transform 180ms ease;
+    transform 180ms ease,
+    background 220ms ease;
   scrollbar-width: thin;
   scrollbar-color: rgba(169, 190, 255, 0.22) transparent;
   background:
@@ -844,7 +763,7 @@ body {
 .menu__remove:hover,
 .menu__remove:focus-visible {
   border-color: rgba(169, 190, 255, 0.18);
-  box-shadow: 0 0 18px rgba(169, 190, 255, 0.14);
+  box-shadow: 0 0 10px rgba(169, 190, 255, 0.10);
 }
 
 .menu__status {
@@ -917,119 +836,9 @@ body {
   background: transparent;
 }
 
-@keyframes firefly-drift {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-
+@keyframes glass-border-orbit {
   to {
-    transform: translate3d(var(--drift-x), var(--drift-y), 0);
-  }
-}
-
-@keyframes firefly-glow {
-  0%,
-  100% {
-    opacity: calc(var(--opacity) * 0.45);
-  }
-
-  50% {
-    opacity: var(--opacity);
-  }
-}
-
-@keyframes streak-drift {
-  0% {
-    opacity: 0;
-    transform: translate3d(-3rem, 0, 0) rotate(var(--angle));
-  }
-
-  16%,
-  78% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate3d(6rem, 2rem, 0) rotate(var(--angle));
-  }
-}
-
-@keyframes haze-drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(0.98);
-  }
-
-  to {
-    transform: translate3d(var(--drift-x), var(--drift-y), 0) scale(1.04);
-  }
-}
-
-@keyframes mist-drift-a {
-  0% {
-    transform: translate3d(-2%, 0.8rem, 0) scale(1.02);
-  }
-
-  50% {
-    transform: translate3d(1.2%, -0.2rem, 0) scale(1.05);
-  }
-
-  100% {
-    transform: translate3d(3%, 0.6rem, 0) scale(1.08);
-  }
-}
-
-@keyframes mist-drift-b {
-  0% {
-    transform: translate3d(3%, 0.5rem, 0) scale(1.08);
-  }
-
-  50% {
-    transform: translate3d(-1.5%, -0.4rem, 0) scale(1.02);
-  }
-
-  100% {
-    transform: translate3d(-4%, 0.9rem, 0) scale(1.1);
-  }
-}
-
-@keyframes mist-breathe-a {
-  0%,
-  100% {
-    opacity: 0.46;
-  }
-
-  45% {
-    opacity: 0.7;
-  }
-
-  72% {
-    opacity: 0.54;
-  }
-}
-
-@keyframes mist-breathe-b {
-  0%,
-  100% {
-    opacity: 0.34;
-  }
-
-  40% {
-    opacity: 0.58;
-  }
-
-  78% {
-    opacity: 0.42;
-  }
-}
-
-@keyframes glass-glint-rotate {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
+    --glint-angle: 360deg;
   }
 }
 
@@ -1075,6 +884,10 @@ body {
     gap: 0.8rem;
   }
 
+  .pinned-sites:has(.pinned-sites__list:empty) {
+    display: none;
+  }
+
   .pinned-site__label {
     font-size: 0.92rem;
   }
@@ -1110,9 +923,6 @@ body {
 
 /* Reduced motion: disable non-essential animations and transitions */
 @media (prefers-reduced-motion: reduce) {
-  .atmosphere__particle,
-  .mist::before,
-  .mist::after,
   .menu,
   .focus-timer,
   .notes-panel,
