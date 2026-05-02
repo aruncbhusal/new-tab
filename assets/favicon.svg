@@ -1,7 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="18" fill="#0b1017"/>
-  <circle cx="32" cy="32" r="18" fill="none" stroke="#a8bcff" stroke-opacity="0.78" stroke-width="3.5"/>
-  <path d="M18 37C24 27 33 22 46 21" fill="none" stroke="#f1a487" stroke-linecap="round" stroke-width="3" stroke-opacity="0.84"/>
-  <circle cx="45" cy="22" r="3" fill="#8acdbf"/>
-  <circle cx="22" cy="46" r="2.4" fill="#d8e2ff" fill-opacity="0.86"/>
+  <rect width="64" height="64" rx="16" fill="#0a0f16"/>
+
+  <!-- aperture blades -->
+  <g transform="translate(32 32)" stroke-linecap="round" stroke-width="3">
+    <path d="M0 -18 L6 -6" stroke="#a9beff" opacity="0.85"/>
+    <path d="M18 0 L6 6" stroke="#f2a67d" opacity="0.75"/>
+    <path d="M0 18 L-6 6" stroke="#a9beff" opacity="0.65"/>
+    <path d="M-18 0 L-6 -6" stroke="#a9beff" opacity="0.55"/>
+    <path d="M12 -12 L4 -4" stroke="#f2a67d" opacity="0.55"/>
+    <path d="M-12 12 L-4 4" stroke="#a9beff" opacity="0.5"/>
+  </g>
+
+  <!-- focus core -->
+  <circle cx="32" cy="32" r="4.5" fill="#e8f0ff"/>
 </svg>

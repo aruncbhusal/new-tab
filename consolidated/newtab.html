@@ -1,0 +1,2338 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>New Tab</title>
+        <link rel="icon" id="page-favicon" type="image/svg+xml" href="" />
+        <style>
+            @property --glint-angle {
+                syntax: '<angle>';
+                inherits: false;
+                initial-value: 0deg;
+            }
+
+            :root {
+                color-scheme: dark;
+                font-family:
+                    Inter,
+                    system-ui,
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    'Segoe UI',
+                    sans-serif;
+                --page: #0a0f16;
+                --foreground: rgba(247, 249, 252, 0.96);
+                --muted: rgba(226, 233, 248, 0.76);
+                --hint: rgba(226, 233, 248, 0.48);
+                --glass: rgba(13, 19, 31, 0.42);
+                --glass-strong: rgba(12, 18, 29, 0.62);
+                --glass-edge: rgba(255, 255, 255, 0.16);
+                --glass-glow: rgba(169, 190, 255, 0.06);
+                --glass-shadow: rgba(0, 0, 0, 0.26);
+                --accent: #a9beff;
+                --accent-glow: rgba(169, 190, 255, 0.42);
+                --warm: #f2a67d;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                overflow: hidden;
+            }
+
+            body {
+                position: relative;
+                background: var(--page);
+                color: var(--foreground);
+                font-family: inherit;
+                letter-spacing: -0.01em;
+            }
+
+            .background {
+                position: fixed;
+                inset: 0;
+                z-index: 0;
+                background-color: var(--page);
+                background-position: center;
+                background-repeat: no-repeat;
+                background-size: cover;
+                transform: scale(1.015);
+                filter: saturate(1.15) brightness(0.96);
+            }
+
+            .background::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: rgba(5, 8, 13, 0.44);
+            }
+
+            .shell {
+                position: relative;
+                z-index: 2;
+                min-height: 100svh;
+                pointer-events: none;
+            }
+
+            .focus {
+                position: fixed;
+                inset: 0;
+            }
+
+            .clock-anchor {
+                position: absolute;
+                top: 45%;
+                left: 50%;
+                display: grid;
+                justify-items: center;
+                transform: translate(-50%, -50%);
+                text-align: center;
+            }
+
+            .clock {
+                margin: 0;
+                font-size: clamp(6.25rem, 18vw, 11rem);
+                font-weight: 560;
+                line-height: 0.88;
+                letter-spacing: -0.045em;
+                font-variant-numeric: tabular-nums lining-nums;
+                font-feature-settings:
+                    'tnum' 1,
+                    'lnum' 1,
+                    'ss01' 1;
+                font-kerning: normal;
+                text-rendering: geometricPrecision;
+                white-space: nowrap;
+                text-shadow:
+                    0 0 32px rgba(0, 0, 0, 0.24),
+                    0 0 18px rgba(169, 190, 255, 0.06);
+                user-select: none;
+                pointer-events: auto;
+                -webkit-user-select: none;
+            }
+
+            .greeting {
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                width: max-content;
+                max-width: min(36rem, calc(100vw - 4rem));
+                margin: 0;
+                color: var(--muted);
+                font-size: clamp(1rem, 1.8vw, 1.34rem);
+                line-height: 1.55;
+                letter-spacing: 0.03em;
+                text-wrap: balance;
+                transform: translate(-50%, 1.18rem);
+            }
+
+            .pinned-sites {
+                position: fixed;
+                top: clamp(1.5rem, 4vw, 2.75rem);
+                left: clamp(1.5rem, 4vw, 2.75rem);
+                z-index: 4;
+                display: grid;
+                gap: 0.95rem;
+                max-width: min(16rem, calc(100vw - 2rem));
+            }
+
+            .eyebrow {
+                margin: 0;
+                color: var(--hint);
+                font-size: 0.7rem;
+                letter-spacing: 0.22em;
+                text-transform: uppercase;
+            }
+
+            .pinned-sites__list {
+                display: grid;
+                gap: 0.68rem;
+            }
+
+            .pinned-site {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.68rem;
+                width: fit-content;
+                padding: 0.2rem 0.05rem;
+                color: rgba(247, 249, 252, 0.76);
+                text-decoration: none;
+                transition:
+                    transform 180ms ease,
+                    color 180ms ease;
+                will-change: transform;
+            }
+
+            .pinned-site:hover,
+            .pinned-site:focus-visible {
+                color: var(--foreground);
+                text-shadow: 0 0 10px var(--accent-glow);
+                transform: translateX(0.25rem);
+            }
+
+            .pinned-site__favicon {
+                width: 2rem;
+                height: 2rem;
+                display: grid;
+                place-items: center;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.07);
+                box-shadow:
+                    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+                    0 0 0 1px rgba(169, 190, 255, 0.02);
+                transition:
+                    box-shadow 180ms ease,
+                    background-color 180ms ease;
+            }
+
+            .pinned-site:hover .pinned-site__favicon,
+            .pinned-site:focus-visible .pinned-site__favicon {
+                background: rgba(169, 190, 255, 0.13);
+                box-shadow:
+                    inset 0 0 0 1px rgba(169, 190, 255, 0.16),
+                    0 0 22px rgba(169, 190, 255, 0.28);
+            }
+
+            .pinned-site__favicon img {
+                width: 1.05rem;
+                height: 1.05rem;
+                object-fit: contain;
+            }
+
+            .pinned-site__label {
+                font-size: 0.97rem;
+                font-weight: 600;
+                line-height: 1.4;
+                white-space: nowrap;
+            }
+
+            .focus-timer,
+            .notes-panel,
+            .menu,
+            .menu-toggle {
+                --pointer-x: 50%;
+                --pointer-y: 50%;
+                --pointer-alpha: 0;
+                contain: paint;
+            }
+
+            .focus-timer,
+            .notes-panel,
+            .menu {
+                position: fixed;
+                isolation: isolate;
+                border: 1px solid var(--glass-edge);
+                background:
+                    radial-gradient(
+                        30rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.05)
+                        ),
+                        rgba(
+                                169,
+                                190,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.028)
+                            )
+                            18%,
+                        rgba(
+                                169,
+                                190,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.011)
+                            )
+                            42%,
+                        rgba(169, 190, 255, 0) 76%
+                    ),
+                    radial-gradient(
+                        44rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.014)
+                        ),
+                        rgba(255, 255, 255, 0) 62%
+                    ),
+                    var(--glass);
+                backdrop-filter: blur(24px) saturate(150%);
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+                    0 18px 52px var(--glass-shadow),
+                    0 0 0 1px var(--glass-glow);
+            }
+
+            .focus-timer::before,
+            .notes-panel::before,
+            .menu::before,
+            .menu-toggle::before {
+                content: '';
+                position: absolute;
+                inset: 1px;
+                border-radius: inherit;
+                background:
+                    radial-gradient(
+                        22rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.06)
+                        ),
+                        rgba(
+                                255,
+                                255,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.018)
+                            )
+                            24%,
+                        rgba(255, 255, 255, 0) 60%
+                    ),
+                    linear-gradient(
+                        135deg,
+                        rgba(255, 255, 255, 0.12),
+                        rgba(255, 255, 255, 0.03) 24%,
+                        rgba(169, 190, 255, 0.05) 52%,
+                        rgba(255, 255, 255, 0) 72%
+                    );
+                /* make pointer highlight fade smoothly; keep a small baseline */
+                opacity: calc(0.16 + var(--pointer-alpha, 0) * 0.36);
+                transition:
+                    opacity 220ms ease,
+                    background 220ms ease;
+                pointer-events: none;
+            }
+
+            .focus-timer::after,
+            .notes-panel::after,
+            .menu::after,
+            .menu-toggle::after {
+                content: '';
+                position: absolute;
+                inset: -1px;
+                padding: 3px;
+                border-radius: inherit;
+                background: conic-gradient(
+                    from var(--glint-angle) at 50% 50%,
+                    rgba(255, 255, 255, 0) 0deg,
+                    rgba(180, 210, 255, 0.18) 16deg,
+                    rgba(255, 255, 255, 0.82) 23deg,
+                    rgba(180, 210, 255, 0.18) 30deg,
+                    rgba(255, 255, 255, 0) 46deg,
+                    rgba(255, 255, 255, 0) 360deg
+                );
+                filter: blur(0.4px);
+                animation: glass-border-orbit 9s linear infinite;
+                -webkit-mask:
+                    linear-gradient(#000 0 0) content-box,
+                    linear-gradient(#000 0 0);
+                -webkit-mask-composite: xor;
+                mask:
+                    linear-gradient(#000 0 0) content-box,
+                    linear-gradient(#000 0 0);
+                mask-composite: exclude;
+                pointer-events: none;
+            }
+
+            .notes-panel::after {
+                animation-duration: 11s;
+            }
+
+            .menu::after {
+                animation-duration: 14s;
+            }
+
+            .menu-toggle::after {
+                animation-duration: 6s;
+            }
+
+            .focus-timer:hover::after,
+            .notes-panel:hover::after,
+            .menu:hover::after,
+            .menu-toggle:hover::after {
+                opacity: 0;
+                transition: opacity 220ms ease;
+            }
+
+            .focus-timer > *,
+            .notes-panel > *,
+            .menu > *,
+            .menu-toggle > * {
+                position: relative;
+                z-index: 1;
+            }
+
+            .focus-timer {
+                top: clamp(1.35rem, 4vw, 2.35rem);
+                left: 50%;
+                z-index: 5;
+                width: min(22.8rem, calc(100vw - 3rem));
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.35rem;
+                padding: 0.58rem 0.52rem;
+                border-radius: 999px;
+                overflow: hidden;
+                transform: translateX(-50%);
+                transition:
+                    width 320ms ease,
+                    padding 320ms ease,
+                    box-shadow 320ms ease,
+                    background 220ms ease;
+            }
+
+            .focus-timer.is-running {
+                width: min(26rem, calc(100vw - 3rem));
+                justify-content: center;
+            }
+
+            .focus-timer__label {
+                flex: 0 0 auto;
+                color: var(--foreground);
+                font-size: 0.92rem;
+                letter-spacing: 0.02em;
+                white-space: nowrap;
+            }
+
+            .focus-timer__minutes,
+            .focus-timer__input,
+            .focus-timer__display {
+                min-width: 0;
+                font-variant-numeric: tabular-nums lining-nums;
+            }
+
+            .focus-timer__minutes {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.06rem;
+                padding: 0.12rem;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.06);
+                transition:
+                    opacity 240ms ease,
+                    transform 260ms ease,
+                    width 280ms ease,
+                    margin 280ms ease;
+            }
+
+            .focus-timer__stepper,
+            .focus-timer__input,
+            .focus-timer__unit {
+                position: relative;
+                z-index: 1;
+            }
+
+            .focus-timer__stepper {
+                width: 1.75rem;
+                height: 1.75rem;
+                display: grid;
+                place-items: center;
+                padding: 0;
+                border: 0;
+                border-radius: 999px;
+                background: transparent;
+                color: var(--foreground);
+                font: inherit;
+                font-size: 1rem;
+                line-height: 1;
+                cursor: pointer;
+                transition:
+                    background-color 180ms ease,
+                    color 180ms ease;
+            }
+
+            .focus-timer__stepper:hover,
+            .focus-timer__stepper:focus-visible {
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .focus-timer__input {
+                flex: 0 0 2.2ch;
+                width: 2.2ch;
+                padding: 0;
+                border: 0;
+                outline: none;
+                appearance: textfield;
+                background: transparent;
+                color: var(--foreground);
+                font: inherit;
+                text-align: center;
+            }
+
+            .focus-timer__input:focus {
+                text-shadow: 0 0 12px rgba(169, 190, 255, 0.18);
+            }
+
+            .focus-timer__input::-webkit-outer-spin-button,
+            .focus-timer__input::-webkit-inner-spin-button {
+                margin: 0;
+                -webkit-appearance: none;
+            }
+
+            .focus-timer__unit {
+                color: var(--hint);
+                font-size: 0.88rem;
+                white-space: nowrap;
+            }
+
+            .focus-timer.is-running .focus-timer__minutes {
+                width: 0;
+                margin: 0 -0.35rem 0 0;
+                padding: 0;
+                border-color: transparent;
+                opacity: 0;
+                transform: scaleX(0.8);
+                pointer-events: none;
+            }
+
+            .focus-timer__display {
+                flex: 0 0 auto;
+                width: 0;
+                overflow: hidden;
+                color: var(--muted);
+                font-size: 1rem;
+                letter-spacing: 0.06em;
+                white-space: nowrap;
+                opacity: 0;
+                transition:
+                    width 280ms ease,
+                    opacity 280ms ease,
+                    margin 280ms ease;
+            }
+
+            .focus-timer.is-running .focus-timer__display {
+                width: 6.2ch;
+                margin-left: 0;
+                opacity: 1;
+            }
+
+            .focus-timer__actions {
+                display: flex;
+                gap: 0.2rem;
+            }
+
+            .focus-timer__button {
+                width: 1.9rem;
+                height: 1.9rem;
+                display: grid;
+                place-items: center;
+                padding: 0;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.07);
+                color: var(--foreground);
+                font: inherit;
+                font-size: 0.84rem;
+                line-height: 1;
+                cursor: pointer;
+                transition:
+                    border-color 180ms ease,
+                    box-shadow 180ms ease,
+                    background-color 180ms ease,
+                    opacity 180ms ease;
+            }
+
+            .focus-timer__button:hover,
+            .focus-timer__button:focus-visible {
+                border-color: rgba(169, 190, 255, 0.2);
+                box-shadow: 0 0 10px rgba(169, 190, 255, 0.12);
+            }
+
+            .focus-timer__button--stop:not(:disabled) {
+                color: rgba(251, 224, 208, 0.95);
+            }
+
+            .focus-timer__button:disabled {
+                opacity: 0.42;
+                cursor: default;
+                box-shadow: none;
+            }
+
+            .quote {
+                position: fixed;
+                bottom: calc(clamp(1.5rem, 4vw, 2.75rem) + 0.82rem);
+                left: 50%;
+                z-index: 3;
+                width: min(52rem, calc(100vw - 18rem));
+                display: flex;
+                align-items: baseline;
+                justify-content: center;
+                gap: 0.45rem;
+                flex-wrap: wrap;
+                margin: 0;
+                color: rgba(226, 233, 248, 0.64);
+                text-align: center;
+                pointer-events: none;
+                transform: translateX(-50%);
+            }
+
+            .quote__text {
+                margin: 0;
+                font-size: clamp(0.94rem, 1.45vw, 1.05rem);
+                line-height: 1.55;
+            }
+
+            .quote__author {
+                color: var(--hint);
+                font-size: 0.9rem;
+                font-style: normal;
+            }
+
+            .quote__author::before {
+                content: '- ';
+            }
+
+            .notes-panel,
+            .menu,
+            .menu-toggle {
+                z-index: 5;
+            }
+
+            .notes-panel {
+                right: clamp(1.5rem, 4vw, 2.75rem);
+                bottom: clamp(1.5rem, 4vw, 2.75rem);
+                width: min(25rem, calc(100vw - 3rem));
+                padding: 1.05rem 1.05rem 0.95rem;
+                border-radius: 1.45rem;
+                overflow: hidden;
+            }
+
+            .notes-panel__label {
+                display: block;
+                margin-bottom: 0.72rem;
+                color: var(--hint);
+                font-size: 0.72rem;
+                letter-spacing: 0.2em;
+                text-transform: uppercase;
+            }
+
+            .notes {
+                width: 100%;
+                min-height: 10rem;
+                max-height: 27vh;
+                padding: 0;
+                border: 0;
+                outline: none;
+                resize: none;
+                overflow: auto;
+                background: transparent;
+                color: var(--foreground);
+                font: inherit;
+                font-size: 1rem;
+                line-height: 1.8;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(169, 190, 255, 0.22) transparent;
+            }
+
+            .notes::placeholder {
+                color: var(--hint);
+            }
+
+            .notes:focus {
+                caret-color: var(--accent);
+            }
+
+            .menu-toggle {
+                position: fixed;
+                left: clamp(1.5rem, 4vw, 2.75rem);
+                bottom: clamp(1.5rem, 4vw, 2.75rem);
+                width: 3.05rem;
+                height: 3.05rem;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--glass-edge);
+                border-radius: 999px;
+                background:
+                    radial-gradient(
+                        16rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.075)
+                        ),
+                        rgba(
+                                169,
+                                190,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.04)
+                            )
+                            24%,
+                        rgba(169, 190, 255, 0) 64%
+                    ),
+                    rgba(12, 18, 29, 0.46);
+                backdrop-filter: blur(22px) saturate(140%);
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 14px 34px rgba(0, 0, 0, 0.22);
+                cursor: pointer;
+                transition:
+                    border-color 180ms ease,
+                    box-shadow 180ms ease,
+                    transform 180ms ease,
+                    background 220ms ease;
+            }
+
+            .menu-toggle:hover,
+            .menu-toggle:focus-visible {
+                border-color: rgba(169, 190, 255, 0.22);
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 16px 36px rgba(0, 0, 0, 0.26),
+                    0 0 10px rgba(169, 190, 255, 0.1);
+                transform: translateY(-0.5px);
+            }
+
+            .menu-toggle span {
+                width: 1rem;
+                height: 1.5px;
+                display: block;
+                background: rgba(247, 249, 252, 0.84);
+                border-radius: 999px;
+            }
+
+            .menu-toggle span + span {
+                margin-top: 0.22rem;
+            }
+
+            .menu {
+                left: clamp(1.5rem, 4vw, 2.75rem);
+                bottom: calc(clamp(1.5rem, 4vw, 2.75rem) + 4rem);
+                width: min(25rem, calc(100vw - 3rem));
+                max-height: min(68svh, 38rem);
+                padding: 1rem 1rem 1.1rem;
+                border-radius: 1.45rem;
+                overflow-x: hidden;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                opacity: 0;
+                pointer-events: none;
+                transform: translateY(0.9rem);
+                transition:
+                    opacity 180ms ease,
+                    transform 180ms ease,
+                    background 220ms ease;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(169, 190, 255, 0.22) transparent;
+                background:
+                    radial-gradient(
+                        30rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.08)
+                        ),
+                        rgba(
+                                169,
+                                190,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.045)
+                            )
+                            18%,
+                        rgba(
+                                169,
+                                190,
+                                255,
+                                calc(var(--pointer-alpha, 0) * 0.018)
+                            )
+                            42%,
+                        rgba(169, 190, 255, 0) 76%
+                    ),
+                    radial-gradient(
+                        44rem circle at var(--pointer-x, 50%)
+                            var(--pointer-y, 50%),
+                        rgba(
+                            255,
+                            255,
+                            255,
+                            calc(var(--pointer-alpha, 0) * 0.026)
+                        ),
+                        rgba(255, 255, 255, 0) 62%
+                    ),
+                    var(--glass-strong);
+            }
+
+            .menu.is-open {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateY(0);
+            }
+
+            .menu__section {
+                display: grid;
+                gap: 0.7rem;
+            }
+
+            .menu__section + .menu__section {
+                margin-top: 1rem;
+                padding-top: 1rem;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .menu__label {
+                margin: 0;
+                color: var(--hint);
+                font-size: 0.72rem;
+                letter-spacing: 0.2em;
+                text-transform: uppercase;
+            }
+
+            .menu__row,
+            .menu__stack {
+                display: grid;
+                gap: 0.7rem;
+            }
+
+            .menu__row {
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center;
+            }
+
+            .menu__input,
+            .menu__button,
+            .menu__remove {
+                font: inherit;
+            }
+
+            .menu__input {
+                width: 100%;
+                padding: 0.8rem 0.9rem;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 1rem;
+                outline: none;
+                background: rgba(255, 255, 255, 0.055);
+                color: var(--foreground);
+            }
+
+            .menu__input:focus {
+                border-color: rgba(169, 190, 255, 0.22);
+                box-shadow: 0 0 0 1px rgba(169, 190, 255, 0.12);
+            }
+
+            .menu__button,
+            .menu__remove {
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 1rem;
+                background: rgba(255, 255, 255, 0.07);
+                color: var(--foreground);
+                cursor: pointer;
+                transition:
+                    border-color 180ms ease,
+                    box-shadow 180ms ease,
+                    background-color 180ms ease;
+            }
+
+            .menu__button {
+                padding: 0.8rem 1rem;
+            }
+
+            .menu__button--wide {
+                width: 100%;
+            }
+
+            .menu__button:hover,
+            .menu__button:focus-visible,
+            .menu__remove:hover,
+            .menu__remove:focus-visible {
+                border-color: rgba(169, 190, 255, 0.18);
+                box-shadow: 0 0 10px rgba(169, 190, 255, 0.1);
+            }
+
+            .menu__status {
+                min-height: 1.2em;
+                margin: 0;
+                color: var(--hint);
+                font-size: 0.86rem;
+                line-height: 1.5;
+            }
+
+            .menu__list {
+                display: grid;
+                gap: 0.55rem;
+            }
+
+            .menu__empty {
+                margin: 0;
+                color: var(--hint);
+                font-size: 0.9rem;
+            }
+
+            .menu__site {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.8rem;
+                padding: 0.2rem 0;
+            }
+
+            .menu__site-meta {
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+            }
+
+            .menu__site-name {
+                display: block;
+                color: var(--foreground);
+                line-height: 1.3;
+            }
+
+            .menu__site-host {
+                display: block;
+                color: var(--hint);
+                font-size: 0.82rem;
+                line-height: 1.3;
+            }
+
+            .menu__remove {
+                padding: 0.5rem 0.7rem;
+                color: var(--warm);
+            }
+
+            .menu::-webkit-scrollbar,
+            .notes::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .menu::-webkit-scrollbar-thumb,
+            .notes::-webkit-scrollbar-thumb {
+                border: 2px solid transparent;
+                border-radius: 999px;
+                background: rgba(169, 190, 255, 0.22);
+                background-clip: content-box;
+            }
+
+            .menu::-webkit-scrollbar-track,
+            .notes::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            @keyframes glass-border-orbit {
+                to {
+                    --glint-angle: 360deg;
+                }
+            }
+
+            @media (max-width: 900px) {
+                .quote {
+                    width: calc(100vw - 12rem);
+                }
+            }
+
+            @media (max-width: 640px) {
+                .clock {
+                    font-size: clamp(5.1rem, 24vw, 7.5rem);
+                }
+
+                .greeting {
+                    max-width: calc(100vw - 2rem);
+                    font-size: 1rem;
+                    transform: translate(-50%, 1rem);
+                }
+
+                .focus-timer,
+                .focus-timer.is-running {
+                    width: calc(100vw - 2rem);
+                }
+
+                .focus-timer {
+                    padding: 0.6rem 0.5rem;
+                    gap: 0.32rem;
+                }
+
+                .focus-timer__actions {
+                    gap: 0.18rem;
+                }
+
+                .focus-timer__button {
+                    width: 1.84rem;
+                    height: 1.84rem;
+                }
+
+                .pinned-sites {
+                    top: 1rem;
+                    left: 1rem;
+                    gap: 0.8rem;
+                }
+
+                .pinned-sites:has(.pinned-sites__list:empty) {
+                    display: none;
+                }
+
+                .pinned-site__label {
+                    font-size: 0.92rem;
+                }
+
+                .notes-panel {
+                    right: 1rem;
+                    left: 1rem;
+                    width: auto;
+                    bottom: 5.9rem;
+                }
+
+                .notes {
+                    min-height: 8rem;
+                    max-height: 20vh;
+                }
+
+                .quote {
+                    bottom: 1.9rem;
+                    width: calc(100vw - 6.5rem);
+                }
+
+                .menu {
+                    left: 1rem;
+                    bottom: 5.25rem;
+                    width: calc(100vw - 2rem);
+                    max-height: 64svh;
+                }
+
+                .menu__row {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            /* Reduced motion: disable non-essential animations and transitions */
+            @media (prefers-reduced-motion: reduce) {
+                .menu,
+                .focus-timer,
+                .notes-panel,
+                .menu-toggle {
+                    animation: none !important;
+                    transition: none !important;
+                }
+
+                .pinned-site,
+                .menu__button,
+                .focus-timer__button {
+                    transition: none !important;
+                }
+            }
+
+            /* Improve focus visibility for keyboard users */
+            .pinned-site:focus-visible,
+            .menu__button:focus-visible,
+            .focus-timer__stepper:focus-visible,
+            .menu__remove:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 4px;
+                border-radius: 8px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="background" data-background aria-hidden="true"></div>
+
+        <form class="focus-timer" data-focus-timer aria-label="Focus timer">
+            <span class="focus-timer__label">Focus mode</span>
+            <div class="focus-timer__minutes" data-timer-minutes>
+                <button
+                    class="focus-timer__stepper"
+                    data-timer-decrease
+                    type="button"
+                    aria-label="Decrease timer by 5 minutes"
+                >
+                    -
+                </button>
+                <input
+                    class="focus-timer__input"
+                    data-timer-input
+                    type="number"
+                    min="5"
+                    max="180"
+                    step="5"
+                    value="25"
+                    aria-label="Focus timer in minutes"
+                />
+                <span class="focus-timer__unit">mins</span>
+                <button
+                    class="focus-timer__stepper"
+                    data-timer-increase
+                    type="button"
+                    aria-label="Increase timer by 5 minutes"
+                >
+                    +
+                </button>
+            </div>
+            <span class="focus-timer__display" data-timer-display>25:00</span>
+            <div class="focus-timer__actions">
+                <button
+                    class="focus-timer__button"
+                    data-timer-start
+                    type="submit"
+                    aria-label="Start timer"
+                >
+                    &#9654;
+                </button>
+                <button
+                    class="focus-timer__button focus-timer__button--stop"
+                    data-timer-stop
+                    type="button"
+                    aria-label="Stop timer"
+                >
+                    &#9632;
+                </button>
+            </div>
+        </form>
+
+        <nav class="pinned-sites" aria-label="Pinned sites">
+            <p class="eyebrow">Pinned</p>
+            <div class="pinned-sites__list" data-links></div>
+        </nav>
+
+        <main class="shell">
+            <section class="focus" aria-label="Dashboard">
+                <div class="clock-anchor">
+                    <time class="clock" data-clock>00:00</time>
+                    <p class="greeting" data-greeting>Good evening, friend.</p>
+                </div>
+            </section>
+        </main>
+
+        <figure class="quote">
+            <blockquote class="quote__text" data-quote-text></blockquote>
+            <figcaption class="quote__author" data-quote-author></figcaption>
+        </figure>
+
+        <aside class="notes-panel" data-notes-panel aria-label="Notes">
+            <label class="notes-panel__label" for="notes">Notes</label>
+            <textarea
+                class="notes"
+                id="notes"
+                data-notes
+                aria-label="Notes"
+                spellcheck="false"
+                placeholder="Leave yourself a quiet note."
+            ></textarea>
+        </aside>
+
+        <button
+            class="menu-toggle"
+            type="button"
+            data-menu-toggle
+            aria-expanded="false"
+            aria-controls="dashboard-menu"
+            aria-label="Open settings"
+        >
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <aside class="menu" id="dashboard-menu" data-menu aria-hidden="true">
+            <form class="menu__section" data-name-form>
+                <label class="menu__label" for="nickname-input">Nickname</label>
+                <div class="menu__row">
+                    <input
+                        class="menu__input"
+                        id="nickname-input"
+                        data-nickname-input
+                        type="text"
+                        maxlength="24"
+                        placeholder="How should this page greet you?"
+                    />
+                    <button class="menu__button" type="submit">Save</button>
+                </div>
+            </form>
+
+            <form class="menu__section" data-link-form>
+                <label class="menu__label" for="site-label">Add site</label>
+                <input
+                    class="menu__input"
+                    id="site-label"
+                    data-link-label
+                    type="text"
+                    maxlength="24"
+                    placeholder="Label"
+                />
+                <input
+                    class="menu__input"
+                    id="site-url"
+                    data-link-url
+                    type="text"
+                    inputmode="url"
+                    placeholder="example.com"
+                />
+                <div class="menu__stack">
+                    <button
+                        class="menu__button menu__button--wide"
+                        type="submit"
+                    >
+                        Pin site
+                    </button>
+                    <p class="menu__status" data-link-status>
+                        Up to 8 pinned sites.
+                    </p>
+                </div>
+            </form>
+
+            <section class="menu__section">
+                <p class="menu__label">Manage pinned</p>
+                <div class="menu__list" data-link-manager></div>
+            </section>
+        </aside>
+
+        <script>
+            /**
+             * script.js — Minimal New Tab page behaviour.
+             *
+             * Responsibilities:
+             *  - clock & greeting
+             *  - pinned sites and favicons
+             *  - notes persistence
+             *  - focus timer with expiry sound
+             *  - background image loading and caching
+             */
+            const TICK_RATE = 1000;
+
+            const quotes = [
+                {
+                    text: 'I am rooted, but I flow.',
+                    author: 'Virginia Woolf',
+                },
+                {
+                    text: 'The art of being wise is knowing what to overlook.',
+                    author: 'William James',
+                },
+                {
+                    text: 'Pay attention. Be astonished. Tell about it.',
+                    author: 'Mary Oliver',
+                },
+                {
+                    text: 'Let everything happen to you: beauty and terror. Just keep going. No feeling is final.',
+                    author: 'Rainer Maria Rilke',
+                },
+                {
+                    text: 'The soul becomes dyed with the color of its thoughts.',
+                    author: 'Marcus Aurelius',
+                },
+                {
+                    text: 'I dwell in possibility.',
+                    author: 'Emily Dickinson',
+                },
+                {
+                    text: 'We are shaped and fashioned by what we love.',
+                    author: 'Johann Wolfgang von Goethe',
+                },
+                {
+                    text: 'Have patience with everything unresolved in your heart.',
+                    author: 'Rainer Maria Rilke',
+                },
+            ];
+
+            const greetingVariants = {
+                night: [
+                    'The quiet hour is yours',
+                    'Night leaves room to think',
+                    'Move gently through the late hours',
+                    'The world is softer at this hour',
+                ],
+                morning: [
+                    'A fresh start looks good on you',
+                    'Take the morning slowly and clearly',
+                    'Make this morning deliberate',
+                    'There is still time to begin well',
+                ],
+                afternoon: [
+                    'Steady is enough for the middle of the day',
+                    'Keep the afternoon uncluttered',
+                    'Let the next task be the only task',
+                    'The day still has room for good work',
+                ],
+                evening: [
+                    'Ease into what matters tonight',
+                    'Let the evening narrow to what counts',
+                    'A calmer pace will do nicely',
+                    'The rest of the day can be simpler from here',
+                ],
+            };
+
+            // Single inline fallback image (no external files).
+            // Using an embedded SVG data-URL removes any filesystem asset
+            // dependency and keeps the consolidated HTML fully portable.
+            const _fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#a9beff"/><text x="32" y="42" font-family="system-ui, sans-serif" font-size="28" font-weight="600" text-anchor="middle" fill="#0a0f16">N</text></svg>`;
+            const _fallbackDataUrl =
+                'data:image/svg+xml;charset=UTF-8,' +
+                encodeURIComponent(_fallbackSvg);
+            const fallbackImages = [_fallbackDataUrl];
+
+            // Ensure the <link rel="icon"> in the document uses the inline SVG
+            // so the page has a favicon without loading any external file.
+            (function setInlineFavicon() {
+                try {
+                    const link =
+                        document.getElementById('page-favicon') ||
+                        document.querySelector('link[rel="icon"]');
+                    if (link) link.href = _fallbackDataUrl;
+                } catch (e) {
+                    // Non-critical — keep running if assignment fails.
+                }
+            })();
+
+            const notesStorageKey = 'minimal-new-tab-notes';
+            const nicknameStorageKey = 'minimal-new-tab-nickname';
+            const linksStorageKey = 'minimal-new-tab-links';
+            const focusMinutesStorageKey = 'minimal-new-tab-focus-minutes';
+            const focusEndStorageKey = 'minimal-new-tab-focus-end';
+            const backgroundCacheStorageKey =
+                'minimal-new-tab-background-cache';
+            const backgroundCacheTtlMs = 8 * 60 * 60 * 1000;
+            const maxPinnedSites = 8;
+            const hour12StorageKey = 'minimal-new-tab-hour12';
+            const $ = (q) => document.querySelector(q);
+
+            // Lightweight wrapper for localStorage.
+            // - Serialises values as JSON.
+            // - Returns a sensible fallback on parse errors.
+            // - Passing `null`/`undefined` removes the key.
+            const store = {
+                get: (k, f = null) => {
+                    try {
+                        const v = localStorage.getItem(k);
+                        return v === null ? f : JSON.parse(v);
+                    } catch {
+                        return f;
+                    }
+                },
+                set: (k, v) => {
+                    try {
+                        v === null || v === undefined
+                            ? localStorage.removeItem(k)
+                            : localStorage.setItem(k, JSON.stringify(v));
+                    } catch {}
+                },
+            };
+
+            const create = (tag, props = {}, ...children) => {
+                const el = document.createElement(tag);
+
+                Object.assign(el, props);
+
+                for (const child of children.flat()) {
+                    if (child == null) continue;
+                    el.append(child);
+                }
+
+                return el;
+            };
+
+            let use12Hour = Boolean(store.get(hour12StorageKey, false));
+
+            const el = {
+                bg: $('[data-background]'),
+                clock: $('[data-clock]'),
+                greeting: $('[data-greeting]'),
+                quoteText: $('[data-quote-text]'),
+                quoteAuthor: $('[data-quote-author]'),
+                notes: $('[data-notes]'),
+                links: $('[data-links]'),
+                linkManager: $('[data-link-manager]'),
+                linkStatus: $('[data-link-status]'),
+                nicknameInput: $('[data-nickname-input]'),
+                linkLabel: $('[data-link-label]'),
+                linkUrl: $('[data-link-url]'),
+                nameForm: $('[data-name-form]'),
+                linkForm: $('[data-link-form]'),
+                menu: $('[data-menu]'),
+                menuToggle: $('[data-menu-toggle]'),
+                timer: $('[data-focus-timer]'),
+                timerInput: $('[data-timer-input]'),
+                timerDisplay: $('[data-timer-display]'),
+                timerStart: $('[data-timer-start]'),
+                timerStop: $('[data-timer-stop]'),
+                timerDec: $('[data-timer-decrease]'),
+                timerInc: $('[data-timer-increase]'),
+                notesPanel: $('[data-notes-panel]'),
+            };
+            const glassElements = [
+                el.timer,
+                el.notesPanel,
+                el.menu,
+                el.menuToggle,
+            ].filter(Boolean);
+
+            const state = {
+                nickname: store.get(nicknameStorageKey, ''),
+                links: loadPinnedSites(),
+                timer: {
+                    intervalId: null,
+                    endTime: 0,
+                    minutes: loadFocusMinutes(),
+                },
+            };
+
+            const prefersReducedMotion = window.matchMedia(
+                '(prefers-reduced-motion: reduce)',
+            ).matches;
+
+            let cachedGreeting = { key: null, text: '' };
+
+            // Global AudioContext used for expiry sounds.
+            // Kept at module scope to avoid creating multiple contexts.
+            let audioCtx = null;
+
+            function initRender() {
+                renderGreeting();
+                renderQuote();
+                renderTimerDisplay();
+            }
+
+            function pickRandom(items) {
+                return items[Math.floor(Math.random() * items.length)];
+            }
+
+            function readBackgroundCache() {
+                const cachedValue = store.get(backgroundCacheStorageKey, null);
+
+                if (
+                    !cachedValue ||
+                    typeof cachedValue !== 'object' ||
+                    typeof cachedValue.dataUrl !== 'string' ||
+                    typeof cachedValue.expiresAt !== 'number'
+                ) {
+                    return null;
+                }
+
+                return cachedValue;
+            }
+
+            function setBackground(url) {
+                if (!el.bg) return;
+                el.bg.style.backgroundImage = `url("${url}")`;
+            }
+
+            function normalizeUrl(value) {
+                let urlValue = value.trim();
+
+                if (!urlValue) return null;
+
+                if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(urlValue)) {
+                    urlValue = `https://${urlValue}`;
+                }
+
+                const url = safeUrl(urlValue);
+                if (!url) return null;
+
+                if (!['http:', 'https:'].includes(url.protocol)) {
+                    return null;
+                }
+
+                return url.href;
+            }
+
+            function safeUrl(href) {
+                try {
+                    return new URL(href);
+                } catch {
+                    return null;
+                }
+            }
+
+            function createSiteLabel(label, href) {
+                if (label.trim()) {
+                    return label.trim();
+                }
+
+                const url = safeUrl(href);
+                const hostname = url
+                    ? url.hostname.replace(/^www\./, '')
+                    : 'site';
+                const firstChunk = hostname.split('.')[0] || hostname;
+                return firstChunk.charAt(0).toUpperCase() + firstChunk.slice(1);
+            }
+
+            function sanitizePinnedSites(links) {
+                if (!Array.isArray(links)) {
+                    // Stored value is not an array — fail safely by returning an empty list.
+                    return [];
+                }
+
+                const seen = new Set();
+
+                return links
+                    .map((link) => {
+                        if (!link || typeof link !== 'object') {
+                            return null;
+                        }
+
+                        const href = normalizeUrl(String(link.href || ''));
+
+                        if (!href || seen.has(href)) {
+                            return null;
+                        }
+
+                        seen.add(href);
+
+                        return {
+                            label: createSiteLabel(
+                                String(link.label || ''),
+                                href,
+                            ),
+                            href,
+                        };
+                    })
+                    .filter(Boolean)
+                    .slice(0, maxPinnedSites);
+            }
+
+            function clampMinutes(value, fallback = 25) {
+                if (!Number.isFinite(value)) return fallback;
+                return Math.round(Math.min(180, Math.max(5, value)) / 5) * 5;
+            }
+
+            function loadFocusMinutes() {
+                const raw = store.get(focusMinutesStorageKey, null);
+                return raw === null ? 25 : clampMinutes(Number(raw));
+            }
+
+            function loadPinnedSites() {
+                return sanitizePinnedSites(store.get(linksStorageKey, []));
+            }
+
+            function hashString(value) {
+                let hash = 0;
+
+                for (let index = 0; index < value.length; index += 1) {
+                    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+                }
+
+                return hash;
+            }
+
+            function faviconDataUrl(label, href) {
+                const url = safeUrl(href);
+                const hostname = url
+                    ? url.hostname.replace(/^www\./, '')
+                    : 'site';
+
+                const initial = (
+                    label.trim()[0] ||
+                    hostname[0] ||
+                    '?'
+                ).toUpperCase();
+                const hue = hashString(hostname) % 360;
+
+                const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="18" fill="hsl(${hue} 28% 17%)"/>
+  <rect x="2" y="2" width="60" height="60" rx="16"
+        fill="none" stroke="hsla(${hue} 70% 80% / 0.28)"/>
+  <text x="32" y="38"
+        text-anchor="middle"
+        font-family="system-ui, sans-serif"
+        font-size="28"
+        font-weight="600"
+        fill="hsla(${hue} 90% 94% / 0.94)">
+    ${initial}
+  </text>
+</svg>
+`.trim();
+
+                return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+            }
+
+            function faviconRemoteUrl(href) {
+                const url = safeUrl(href);
+                const hostname = url
+                    ? url.hostname.replace(/^www\./, '')
+                    : 'site';
+                return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
+            }
+
+            /**
+             * Site-specific favicon overrides.
+             * Useful when automatic favicon lookup returns generic or incorrect icons.
+             */
+            function getDomainOverrides(hostname) {
+                const map = {
+                    'mail.google.com':
+                        'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+                    'calendar.google.com':
+                        'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_31.ico',
+                    'drive.google.com':
+                        'https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png',
+                    'maps.google.com':
+                        'https://maps.gstatic.com/favicon3/poi_maps.ico',
+                    'github.com':
+                        'https://github.githubassets.com/favicons/favicon.svg',
+                    'youtube.com':
+                        'https://www.youtube.com/s/desktop/fe69d6d0/img/favicon_32x32.png',
+                    'notion.so': 'https://www.notion.so/images/favicon.ico',
+                };
+
+                return map[hostname] || null;
+            }
+
+            function faviconCandidateUrls(href) {
+                const url = safeUrl(href);
+                const hostname = url
+                    ? url.hostname.replace(/^www\./, '')
+                    : null;
+                const origin = url ? url.origin : null;
+
+                const candidates = [];
+
+                if (!hostname || !origin) {
+                    return [faviconRemoteUrl(href)];
+                }
+
+                const override = getDomainOverrides(hostname);
+
+                if (override) candidates.push(override);
+
+                if (!hostname.endsWith('google.com')) {
+                    candidates.push(
+                        `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`,
+                    );
+                }
+
+                candidates.push(faviconRemoteUrl(href));
+
+                candidates.push(
+                    `${origin}/favicon.ico`,
+                    `${origin}/favicon.png`,
+                    `${origin}/favicon.svg`,
+                    `${origin}/apple-touch-icon.png`,
+                );
+
+                return candidates;
+            }
+
+            function applyFavicon(imageElement, label, href) {
+                imageElement.decoding = 'async';
+                imageElement.loading = 'lazy';
+
+                const candidates = faviconCandidateUrls(href);
+                let index = 0;
+
+                // Stop attempting further candidates and clear event handlers.
+                const cleanup = () => {
+                    imageElement.onload = null;
+                    imageElement.onerror = null;
+                };
+
+                const tryNext = () => {
+                    if (index >= candidates.length) {
+                        cleanup();
+                        imageElement.src = faviconDataUrl(label, href);
+                        return;
+                    }
+
+                    imageElement.src = candidates[index++];
+                };
+
+                imageElement.onload = () => {
+                    if (imageElement.naturalWidth > 0) {
+                        cleanup();
+                        return;
+                    }
+                    tryNext();
+                };
+
+                imageElement.onerror = tryNext;
+
+                tryNext();
+            }
+
+            function updateLinkStatus() {
+                if (!el.linkStatus) return;
+
+                const count = state.links.length;
+                el.linkStatus.textContent =
+                    count >= maxPinnedSites
+                        ? `Limit reached (${maxPinnedSites})`
+                        : `${count}/${maxPinnedSites} pinned sites`;
+            }
+
+            function updateClock() {
+                if (!el.clock) return;
+                const formatter = new Intl.DateTimeFormat([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: use12Hour,
+                });
+                el.clock.textContent = formatter.format(new Date());
+                renderGreeting();
+            }
+
+            let clockInterval = null;
+
+            function startClock() {
+                updateClock();
+
+                const now = new Date();
+                const delay =
+                    (60 - now.getSeconds()) * TICK_RATE - now.getMilliseconds();
+
+                window.setTimeout(() => {
+                    updateClock();
+                    if (clockInterval) clearInterval(clockInterval);
+                    clockInterval = setInterval(updateClock, 60000);
+                }, delay);
+            }
+
+            function getGreetingPeriod(date) {
+                const hour = date.getHours();
+
+                if (hour < 5) {
+                    return 'night';
+                }
+
+                if (hour < 12) {
+                    return 'morning';
+                }
+
+                if (hour < 17) {
+                    return 'afternoon';
+                }
+
+                return 'evening';
+            }
+
+            function renderGreeting() {
+                const now = new Date();
+                const period = getGreetingPeriod(now);
+
+                if (cachedGreeting.key !== period) {
+                    cachedGreeting.key = period;
+                    cachedGreeting.text = pickRandom(greetingVariants[period]);
+                }
+
+                const nickname = state.nickname.trim() || 'friend';
+                if (el.greeting)
+                    el.greeting.textContent = `${cachedGreeting.text}, ${nickname}.`;
+            }
+
+            let currentQuote = null;
+
+            function renderQuote() {
+                if (!currentQuote) {
+                    currentQuote = pickRandom(quotes);
+                }
+
+                if (el.quoteText)
+                    el.quoteText.textContent = `"${currentQuote.text}"`;
+                if (el.quoteAuthor)
+                    el.quoteAuthor.textContent = currentQuote.author;
+            }
+
+            function renderLinks() {
+                const pins = document.createDocumentFragment();
+                const manager = document.createDocumentFragment();
+
+                state.links.forEach(({ label, href }, i) => {
+                    const createFaviconImg = () => {
+                        const img = create('img', {
+                            width: 18,
+                            height: 18,
+                            alt: '',
+                        });
+                        applyFavicon(img, label, href);
+                        return img;
+                    };
+
+                    // pinned
+                    if (el.links) {
+                        pins.appendChild(
+                            create(
+                                'a',
+                                {
+                                    className: 'pinned-site',
+                                    href,
+                                    title: label,
+                                },
+                                create(
+                                    'span',
+                                    { className: 'pinned-site__favicon' },
+                                    createFaviconImg(),
+                                ),
+                                create('span', {
+                                    className: 'pinned-site__label',
+                                    textContent: label,
+                                }),
+                            ),
+                        );
+                    }
+
+                    // manager
+                    if (el.linkManager) {
+                        const url = safeUrl(href);
+                        const hostname = url
+                            ? url.hostname.replace(/^www\./, '')
+                            : href;
+
+                        manager.appendChild(
+                            create(
+                                'div',
+                                { className: 'menu__site' },
+                                create(
+                                    'div',
+                                    { className: 'menu__site-meta' },
+                                    create(
+                                        'span',
+                                        { className: 'pinned-site__favicon' },
+                                        createFaviconImg(),
+                                    ),
+                                    create(
+                                        'div',
+                                        {},
+                                        create('span', {
+                                            className: 'menu__site-name',
+                                            textContent: label,
+                                        }),
+                                        create('span', {
+                                            className: 'menu__site-host',
+                                            textContent: hostname,
+                                        }),
+                                    ),
+                                ),
+                                (() => {
+                                    const btn = create('button', {
+                                        className: 'menu__remove',
+                                        textContent: 'Remove',
+                                    });
+                                    btn.dataset.removeIndex = i;
+                                    return btn;
+                                })(),
+                            ),
+                        );
+                    }
+                });
+
+                el.links?.replaceChildren(pins);
+
+                el.linkManager?.replaceChildren(
+                    state.links.length
+                        ? manager
+                        : create('p', {
+                              className: 'menu__empty',
+                              textContent: 'No pinned sites yet.',
+                          }),
+                );
+
+                updateLinkStatus();
+            }
+
+            const Notes = {
+                init() {
+                    const { notes } = el;
+                    if (!notes) return;
+
+                    notes.value = store.get(notesStorageKey, '');
+                    let timeout;
+                    notes.oninput = () => {
+                        clearTimeout(timeout);
+                        timeout = setTimeout(() => {
+                            store.set(notesStorageKey, notes.value);
+                        }, 200);
+                    };
+                },
+            };
+
+            const Nickname = {
+                init() {
+                    const input = el.nicknameInput;
+                    const form = el.nameForm;
+                    if (!input || !form) return;
+
+                    input.value = state.nickname;
+
+                    form.onsubmit = (e) => {
+                        e.preventDefault();
+                        state.nickname = input.value.trim();
+                        store.set(nicknameStorageKey, state.nickname || null);
+                        renderGreeting();
+                    };
+                },
+            };
+
+            function setMenuOpen(isOpen) {
+                if (!el.menu || !el.menuToggle) return;
+                el.menu.classList.toggle('is-open', isOpen);
+                el.menuToggle.setAttribute('aria-expanded', String(isOpen));
+                el.menu.setAttribute('aria-hidden', String(!isOpen));
+            }
+
+            function hydrateMenu() {
+                if (!el.menu || !el.menuToggle) return;
+
+                el.menuToggle.addEventListener('click', () => {
+                    const isOpen =
+                        el.menuToggle.getAttribute('aria-expanded') !== 'true';
+                    setMenuOpen(isOpen);
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (
+                        el.menuToggle.getAttribute('aria-expanded') ===
+                            'true' &&
+                        !el.menu.contains(event.target) &&
+                        !el.menuToggle.contains(event.target)
+                    ) {
+                        setMenuOpen(false);
+                    }
+                });
+
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') {
+                        setMenuOpen(false);
+                        return;
+                    }
+
+                    // Quick toggle: press '/' to open/close the menu when focus is not in an input.
+                    if (
+                        event.key === '/' &&
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.altKey
+                    ) {
+                        const target = event.target;
+                        const tag =
+                            target &&
+                            target.tagName &&
+                            target.tagName.toLowerCase();
+                        const isEditable =
+                            target &&
+                            (target.isContentEditable ||
+                                tag === 'input' ||
+                                tag === 'textarea');
+
+                        if (!isEditable) {
+                            event.preventDefault();
+                            const isOpen =
+                                el.menuToggle.getAttribute('aria-expanded') ===
+                                'true';
+                            setMenuOpen(!isOpen);
+                            el.menuToggle.focus();
+                        }
+                    }
+                });
+            }
+
+            const PinnedSites = {
+                init() {
+                    const form = el.linkForm;
+                    const list = el.linkManager;
+
+                    this.render();
+
+                    if (!form || !list) return;
+
+                    form.onsubmit = (e) => {
+                        e.preventDefault();
+                        if (state.links.length >= maxPinnedSites) return;
+
+                        const href = normalizeUrl(el.linkUrl.value);
+                        if (!href) {
+                            el.linkStatus &&
+                                (el.linkStatus.textContent =
+                                    'Enter a valid URL.');
+                            return;
+                        }
+                        if (state.links.some((l) => l.href === href)) {
+                            el.linkStatus &&
+                                (el.linkStatus.textContent = 'Already pinned.');
+                            return;
+                        }
+
+                        const label = createSiteLabel(el.linkLabel.value, href);
+
+                        state.links = sanitizePinnedSites([
+                            ...state.links,
+                            { label, href },
+                        ]);
+
+                        store.set(linksStorageKey, state.links);
+                        el.linkLabel.value = '';
+                        el.linkUrl.value = '';
+                        el.linkUrl.focus();
+                        this.render();
+                    };
+
+                    list.onclick = (e) => {
+                        const btn = e.target.closest('[data-remove-index]');
+                        if (!btn) return;
+
+                        const i = Number(btn.dataset.removeIndex);
+                        state.links.splice(i, 1);
+
+                        store.set(linksStorageKey, state.links);
+                        this.render();
+                    };
+                },
+
+                render() {
+                    renderLinks();
+                },
+            };
+
+            function formatDuration(milliseconds) {
+                const totalSeconds = Math.ceil(
+                    Math.max(0, milliseconds) / TICK_RATE,
+                );
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+
+                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+
+            function renderTimerDisplay(ms = state.timer.minutes * 60000) {
+                if (!el.timerDisplay) return;
+                el.timerDisplay.textContent = formatDuration(ms);
+            }
+
+            function syncTimerInput(nextMinutes) {
+                if (!el.timerInput) return;
+
+                const minutes = clampMinutes(
+                    nextMinutes ?? Number(el.timerInput.value),
+                );
+
+                el.timerInput.value = String(minutes);
+                state.timer.minutes = minutes;
+                store.set(focusMinutesStorageKey, minutes);
+
+                renderTimerDisplay(minutes * 60000);
+            }
+
+            function stepTimerMinutes(direction) {
+                const current = clampMinutes(
+                    Number(el.timerInput.value || state.timer.minutes),
+                );
+                const next = clampMinutes(current + direction * 5);
+                syncTimerInput(next);
+            }
+
+            function setTimerRunning(isRunning) {
+                el.timer?.classList.toggle('is-running', isRunning);
+                el.timerStart && (el.timerStart.disabled = isRunning);
+                el.timerStop && (el.timerStop.disabled = !isRunning);
+                el.timerInput && (el.timerInput.disabled = isRunning);
+                el.timerDec && (el.timerDec.disabled = isRunning);
+                el.timerInc && (el.timerInc.disabled = isRunning);
+            }
+
+            async function ensureAudioContext() {
+                const AudioContextCtor =
+                    window.AudioContext || window.webkitAudioContext;
+
+                if (!AudioContextCtor) return null;
+
+                if (!audioCtx) {
+                    audioCtx = new AudioContextCtor();
+                }
+
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    try {
+                        await audioCtx.resume();
+                    } catch {
+                        return audioCtx;
+                    }
+                }
+
+                return audioCtx;
+            }
+
+            async function playExpirySound() {
+                const audioContext = await ensureAudioContext();
+
+                if (!audioContext) {
+                    return;
+                }
+
+                const startTime = audioContext.currentTime + 0.02;
+                const notes = [880, 740, 988];
+
+                notes.forEach((frequency, index) => {
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    const noteStart = startTime + index * 0.22;
+
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(frequency, noteStart);
+
+                    gainNode.gain.setValueAtTime(0.0001, noteStart);
+                    gainNode.gain.exponentialRampToValueAtTime(
+                        0.05,
+                        noteStart + 0.03,
+                    );
+                    gainNode.gain.exponentialRampToValueAtTime(
+                        0.0001,
+                        noteStart + 0.19,
+                    );
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    oscillator.start(noteStart);
+                    oscillator.stop(noteStart + 0.2);
+                });
+            }
+
+            function stopFocusTimer({ playSound = false } = {}) {
+                if (state.timer.intervalId) {
+                    window.clearInterval(state.timer.intervalId);
+                }
+
+                state.timer.intervalId = null;
+                state.timer.endTime = 0;
+                store.set(focusEndStorageKey, null);
+
+                setTimerRunning(false);
+
+                renderTimerDisplay();
+
+                if (playSound) void playExpirySound();
+            }
+
+            function tickFocusTimer() {
+                const remainingMilliseconds = state.timer.endTime - Date.now();
+
+                if (remainingMilliseconds <= 0) {
+                    renderTimerDisplay();
+                    stopFocusTimer({ playSound: true });
+                    return;
+                }
+
+                renderTimerDisplay(remainingMilliseconds);
+            }
+
+            function startFocusTimer(event) {
+                event.preventDefault();
+
+                if (state.timer.intervalId) {
+                    return;
+                }
+
+                syncTimerInput();
+                void ensureAudioContext();
+
+                const endTime = Date.now() + state.timer.minutes * 60000;
+                state.timer.endTime = endTime;
+                state.timer.intervalId = window.setInterval(
+                    tickFocusTimer,
+                    TICK_RATE,
+                );
+                store.set(focusEndStorageKey, endTime);
+                setTimerRunning(true);
+                tickFocusTimer();
+            }
+
+            const Timer = {
+                init() {
+                    // Make UI reflect the currently configured timer minutes.
+                    syncTimerInput(state.timer.minutes);
+
+                    if (el.timerInput) {
+                        el.timerInput.addEventListener('change', () =>
+                            syncTimerInput(),
+                        );
+                        el.timerInput.addEventListener('blur', () =>
+                            syncTimerInput(),
+                        );
+                    }
+
+                    if (el.timerDec) {
+                        el.timerDec.addEventListener('click', () => {
+                            stepTimerMinutes(-1);
+                        });
+                    }
+
+                    if (el.timerInc) {
+                        el.timerInc.addEventListener('click', () => {
+                            stepTimerMinutes(1);
+                        });
+                    }
+
+                    if (el.timer)
+                        el.timer.addEventListener('submit', startFocusTimer);
+                    if (el.timerStop)
+                        el.timerStop.addEventListener('click', () => {
+                            stopFocusTimer();
+                        });
+
+                    // Restore an in-progress timer from storage if it hasn't expired.
+                    const storedEnd = Number(
+                        store.get(focusEndStorageKey, null),
+                    );
+                    if (
+                        Number.isFinite(storedEnd) &&
+                        storedEnd > Date.now() &&
+                        !state.timer.intervalId
+                    ) {
+                        setTimerRunning(true);
+                        state.timer.endTime = storedEnd;
+                        state.timer.intervalId = window.setInterval(
+                            tickFocusTimer,
+                            TICK_RATE,
+                        );
+                        tickFocusTimer();
+                    } else {
+                        store.set(focusEndStorageKey, null);
+                    }
+                },
+            };
+
+            function hydrateGlassPointerGlow() {
+                // Subtle pointer-following glow on glass UI elements.
+                glassElements.forEach((element) => {
+                    if (!element) return;
+                    element.style.setProperty('--pointer-x', '50%');
+                    element.style.setProperty('--pointer-y', '50%');
+                    element.style.setProperty('--pointer-alpha', '0');
+                    if (prefersReducedMotion) return;
+
+                    const onPointerMove = (event) => {
+                        const bounds = element.getBoundingClientRect();
+                        element.style.setProperty(
+                            '--pointer-x',
+                            `${event.clientX - bounds.left}px`,
+                        );
+                        element.style.setProperty(
+                            '--pointer-y',
+                            `${event.clientY - bounds.top}px`,
+                        );
+                        element.style.setProperty('--pointer-alpha', '1');
+                    };
+
+                    const onPointerLeave = () => {
+                        element.style.setProperty('--pointer-x', '50%');
+                        element.style.setProperty('--pointer-y', '50%');
+                        element.style.setProperty('--pointer-alpha', '0');
+                    };
+
+                    element.addEventListener('pointermove', onPointerMove, {
+                        passive: true,
+                    });
+                    element.addEventListener('pointerleave', onPointerLeave);
+                });
+            }
+
+            function loadBackground() {
+                const localFallback = pickRandom(fallbackImages);
+                const cachedBackground = readBackgroundCache();
+                const now = Date.now();
+
+                if (cachedBackground && cachedBackground.expiresAt > now) {
+                    setBackground(cachedBackground.dataUrl);
+                    return;
+                }
+
+                const remoteBackground = `https://picsum.photos/1600/900?random=${Date.now()}`;
+
+                const fallbackBackground =
+                    cachedBackground?.dataUrl || localFallback;
+
+                setBackground(fallbackBackground);
+
+                (async () => {
+                    try {
+                        const res = await fetch(remoteBackground, {
+                            cache: 'no-store',
+                            mode: 'cors',
+                        });
+
+                        if (!res.ok) return;
+
+                        const blob = await res.blob();
+                        const bitmap = await createImageBitmap(blob);
+
+                        const scale = Math.min(1, 1600 / bitmap.width);
+                        const w = Math.max(1, Math.round(bitmap.width * scale));
+                        const h = Math.max(
+                            1,
+                            Math.round(bitmap.height * scale),
+                        );
+
+                        let dataUrl;
+                        if (typeof OffscreenCanvas !== 'undefined') {
+                            const off = new OffscreenCanvas(w, h);
+                            off.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+                            const outBlob = await off.convertToBlob({
+                                type: 'image/jpeg',
+                                quality: 0.7,
+                            });
+                            dataUrl = await new Promise((res, rej) => {
+                                const r = new FileReader();
+                                r.onloadend = () => res(r.result);
+                                r.onerror = rej;
+                                r.readAsDataURL(outBlob);
+                            });
+                        } else {
+                            const c = document.createElement('canvas');
+                            c.width = w;
+                            c.height = h;
+                            c.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+                            dataUrl = c.toDataURL('image/jpeg', 0.7);
+                        }
+
+                        setBackground(dataUrl);
+                        const fetchedAt = Date.now();
+
+                        store.set(backgroundCacheStorageKey, {
+                            dataUrl,
+                            expiresAt: fetchedAt + backgroundCacheTtlMs,
+                        });
+                    } catch {
+                        // If fetching or processing the remote image fails, keep the current fallback.
+                    }
+                })();
+            }
+
+            initRender();
+
+            Notes.init();
+            Nickname.init();
+            hydrateMenu();
+            PinnedSites.init();
+            Timer.init();
+            hydrateGlassPointerGlow();
+
+            loadBackground();
+            startClock();
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState !== 'visible') return;
+                if (!state.timer.intervalId) return;
+
+                // When tab becomes visible again intervals can be out of sync.
+                // Force a single tick to correct the display and handle expiry.
+                tickFocusTimer();
+            });
+
+            // Clock click toggles 12h / 24h display; preference is persisted.
+            if (el.clock) {
+                // Make it clear the clock is interactive.
+                el.clock.title = 'Toggle 12h / 24h format';
+                el.clock.style.cursor = 'pointer';
+                el.clock.addEventListener('click', () => {
+                    use12Hour = !use12Hour;
+                    store.set(hour12StorageKey, use12Hour);
+                    updateClock();
+                });
+            }
+        </script>
+    </body>
+</html>
