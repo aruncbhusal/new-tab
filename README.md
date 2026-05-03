@@ -50,7 +50,6 @@ If you want to load this as an extension directly:
     "name": "Minimal New Tab",
     "version": "1.0.0",
     "description": "Minimal new tab replacement",
-    "icons": { "128": "icons/icon-128.png" },
     "chrome_url_overrides": { "newtab": "index.html" }
 }
 ```
